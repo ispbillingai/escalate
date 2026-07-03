@@ -36,7 +36,7 @@ define('ACCOUNT_MANAGERS', 'Manager One,Manager Two,Manager Three');
 define('PANEL_DOMAIN', 'ispledger.com');
 
 // Escalation topics, comma separated. Used on the form and as wall filters.
-define('ESCALATION_TOPICS', 'Billing & Payments,Payments Not Reflecting,Router / Connectivity,Hotspot Login Page,Speed & Bandwidth,SMS / Notifications,Support Experience,Other');
+define('ESCALATION_TOPICS', 'Billing & Payments,Payments Not Reflecting,Technical Billing Issues,Router / Connectivity,Hotspot Login Page,Speed & Bandwidth,SMS / Notifications,Non-responsive Support,Support Experience,Other');
 
 // Submission rules
 define('MIN_WORDS', 100);            // minimum words in the issue text

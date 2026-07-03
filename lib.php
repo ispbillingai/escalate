@@ -80,7 +80,7 @@ function accountManagers()
 function escalationTopics()
 {
     $raw = defined('ESCALATION_TOPICS') ? ESCALATION_TOPICS
-        : 'Billing & Payments,Payments Not Reflecting,Router / Connectivity,Hotspot Login Page,Speed & Bandwidth,SMS / Notifications,Support Experience,Other';
+        : 'Billing & Payments,Payments Not Reflecting,Technical Billing Issues,Router / Connectivity,Hotspot Login Page,Speed & Bandwidth,SMS / Notifications,Non-responsive Support,Support Experience,Other';
     return array_values(array_filter(array_map('trim', explode(',', $raw))));
 }
 
