@@ -241,12 +241,12 @@ function addReply(array $row, $authorType, $authorName, $body, $ip)
 function postThreadReplyToTelegram(array $row, $authorType, $authorName, $body)
 {
     try {
-        $who = $authorType === 'staff'
-            ? 'freeispradius team (staff)'
-            : ($authorName !== '' ? $authorName : $row['company_name']) . ' (from their billing panel)';
-        $text = "REPLY ON ESCALATION #" . $row['public_id'] . "\n"
-            . "From: " . $who . "\n"
-            . "Company: " . $row['company_name'] . "\n\n"
+        $header = $authorType === 'staff'
+            ? "\u{1F7E2} FREEISPRADIUS TEAM (STAFF)"
+            : "\u{1F7E0} CUSTOMER · " . mb_strtoupper($authorName !== '' ? $authorName : $row['company_name']) . " (from their billing panel)";
+        $text = $header . "\n"
+            . "REPLY ON ESCALATION #" . $row['public_id'] . "\n"
+            . "Customer: " . $row['company_name'] . "\n\n"
             . mb_substr((string)$body, 0, 3500) . "\n\n"
             . escalationUrl($row['public_id']);
         $params = [
@@ -428,7 +428,8 @@ function tgApi($method, array $params)
 function postEscalationToTelegram(array $row)
 {
     try {
-        $text = "NEW ESCALATION #" . $row['public_id'] . "\n\n"
+        $text = "\u{1F7E0} CUSTOMER · " . mb_strtoupper($row['company_name']) . "\n"
+            . "NEW ESCALATION #" . $row['public_id'] . "\n\n"
             . "Company: " . $row['company_name'] . "\n"
             . ($row['subdomain'] !== '' ? "Panel: " . $row['subdomain'] . "." . panelDomain() . "\n" : '')
             . "Account manager: " . ($row['account_manager'] !== '' ? $row['account_manager'] : 'not set') . "\n"
@@ -461,7 +462,7 @@ function postEscalationToTelegram(array $row)
             return $p !== '' && is_file(__DIR__ . '/' . $p);
         };
         $issuePaths = array_slice(array_values(array_filter(imagesOf($row), $exists)), 0, 9);
-        $tag = 'Escalation #' . $row['public_id'] . ' · ' . $row['company_name']
+        $tag = "\u{1F7E0} Customer " . $row['company_name'] . ' · escalation #' . $row['public_id']
             . ($row['account_manager'] !== '' ? ' · manager: ' . $row['account_manager'] : '');
 
         if (count($issuePaths) === 1) {
@@ -519,8 +520,9 @@ function postEscalationToTelegram(array $row)
 function postReplyToTelegram(array $row, $replyText)
 {
     try {
-        $text = "UPDATE ON ESCALATION #" . $row['public_id'] . "\n"
-            . "Company: " . $row['company_name'] . "\n"
+        $text = "\u{1F7E2} FREEISPRADIUS TEAM (STAFF)\n"
+            . "UPDATE ON ESCALATION #" . $row['public_id'] . "\n"
+            . "Customer: " . $row['company_name'] . "\n"
             . ($row['account_manager'] !== '' ? "Account manager: " . $row['account_manager'] . "\n" : '')
             . "Status: " . statusMeta($row['status'])['label'] . "\n\n"
             . mb_substr((string)$replyText, 0, 3500) . "\n\n"
