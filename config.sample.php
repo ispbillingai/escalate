@@ -15,7 +15,10 @@ define('BASE_URL', 'https://escalate.ispledger.com');
 // 2. Add the bot as an Administrator of your channel (Post Messages permission).
 // 3. Put the channel @username (public channel) or -100... id (private channel) below.
 define('TELEGRAM_BOT_TOKEN', '');
-define('TELEGRAM_CHAT_ID', '');   // e.g. '@ispledger_escalations' or '-1001234567890'
+define('TELEGRAM_CHAT_ID', '@freeispradius');   // channel @username or -100... id
+
+// Public channel link shown on the site; member count is pulled from it.
+define('TELEGRAM_CHANNEL_URL', 'https://t.me/freeispradius');
 
 // Shared key the billing panels send when submitting on behalf of a tenant
 define('PANEL_API_KEY', 'change_this_key');

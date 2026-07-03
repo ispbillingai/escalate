@@ -161,6 +161,9 @@ body {
 }
 .stat b { display: block; font-size: 26px; color: var(--accent); }
 .stat span { color: var(--muted); font-size: 13px; letter-spacing: 1px; text-transform: uppercase; }
+a.stat-link { text-decoration: none; transition: border-color .12s ease; }
+a.stat-link:hover { border-color: var(--accent); }
+a.stat-link b { color: #2ea6ff; }
 
 /* Filter bar */
 .filterbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 22px; }

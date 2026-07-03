@@ -75,6 +75,11 @@ pageHeader('Escalate by ISP Ledger: public escalation wall', 'wall');
     <div class="stat"><b><?php echo $counts['all']; ?></b><span>Escalations</span></div>
     <div class="stat"><b><?php echo $counts['resolved']; ?></b><span>Resolved</span></div>
     <div class="stat"><b><?php echo $counts['open'] + $counts['in_review']; ?></b><span>Being handled</span></div>
+    <?php if (telegramChannelUrl() !== ''): ?>
+    <a class="stat stat-link" href="<?php echo e(telegramChannelUrl()); ?>" target="_blank" rel="noopener">
+        <b><?php echo number_format(telegramMemberCount()); ?></b><span>Watching on Telegram</span>
+    </a>
+    <?php endif; ?>
 </div>
 
 <div id="wall" class="filterbar">

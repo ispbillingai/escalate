@@ -181,6 +181,62 @@ function normalizeFilesArray($entry)
 // ---------------------------------------------------------------------------
 // Telegram
 
+function telegramChannelUrl()
+{
+    return (defined('TELEGRAM_CHANNEL_URL') && TELEGRAM_CHANNEL_URL !== '') ? TELEGRAM_CHANNEL_URL : '';
+}
+
+/**
+ * Member count of the public channel. Bot API when a token is configured,
+ * otherwise the t.me preview page. Cached for 6 hours; falls back to the
+ * last known value, then to the approximate community size.
+ */
+function telegramMemberCount()
+{
+    $url = telegramChannelUrl();
+    if ($url === '') {
+        return 0;
+    }
+    $cacheFile = __DIR__ . '/tg_members.cache';
+    $cached = null;
+    if (is_file($cacheFile)) {
+        $cached = json_decode((string)file_get_contents($cacheFile), true);
+        if (is_array($cached) && ($cached['at'] ?? 0) > time() - 21600 && (int)($cached['count'] ?? 0) > 0) {
+            return (int)$cached['count'];
+        }
+    }
+
+    $count = 0;
+    if (TELEGRAM_BOT_TOKEN !== '' && TELEGRAM_CHAT_ID !== '') {
+        $res = tgApi('getChatMemberCount', ['chat_id' => TELEGRAM_CHAT_ID]);
+        if ($res && !empty($res['ok'])) {
+            $count = (int)$res['result'];
+        }
+    }
+    if ($count === 0) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 6,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; EscalateBot/1.0)',
+        ]);
+        $html = (string)curl_exec($ch);
+        curl_close($ch);
+        if ($html !== '' && preg_match('/([0-9][0-9\s\x{00A0}\x{202F},\.]*)\s*(subscribers|members)/u', $html, $m)) {
+            $count = (int)preg_replace('/[^0-9]/', '', $m[1]);
+        }
+    }
+    if ($count > 0) {
+        @file_put_contents($cacheFile, json_encode(['at' => time(), 'count' => $count]));
+        return $count;
+    }
+    if (is_array($cached) && (int)($cached['count'] ?? 0) > 0) {
+        return (int)$cached['count'];
+    }
+    return 1300;
+}
+
 function tgApi($method, array $params)
 {
     if (TELEGRAM_BOT_TOKEN === '' || TELEGRAM_CHAT_ID === '') {
@@ -410,6 +466,9 @@ function pageHeader($title, $active = '')
         . '<nav class="nav">'
         . $nav('wall', 'index.php', 'Escalation Wall')
         . $nav('submit', 'submit.php', 'Raise an Escalation')
+        . (telegramChannelUrl() !== ''
+            ? '<a class="nav-link" href="' . e(telegramChannelUrl()) . '" target="_blank" rel="noopener">Telegram Channel</a>'
+            : '')
         . '</nav></div></header><main class="wrap">';
 }
 
@@ -419,6 +478,9 @@ function pageFooter()
         . '<p>Every escalation on this platform is public and is posted to our Telegram channel, so nothing gets buried. '
         . 'We read every single one and call back on the follow-up number provided.</p>'
         . '<p class="footer-links"><a href="https://ispledger.com" target="_blank" rel="noopener">ispledger.com</a>'
+        . (telegramChannelUrl() !== ''
+            ? '<span>&middot;</span><a href="' . e(telegramChannelUrl()) . '" target="_blank" rel="noopener">Telegram channel</a>'
+            : '')
         . '<span>&middot;</span><a href="submit.php">Raise an escalation</a>'
         . '<span>&middot;</span><a href="admin.php">Staff</a></p>'
         . '</div></footer></body></html>';
