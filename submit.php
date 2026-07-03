@@ -185,28 +185,72 @@ pageHeader('Raise an escalation', 'submit');
     issue.addEventListener('input', updateMeter);
     updateMeter();
 
-    function bindPreview(input, holder, single) {
-        input.addEventListener('change', function () {
-            holder.innerHTML = '';
-            var files = Array.prototype.slice.call(input.files || []);
-            if (!single && files.length > MAX_IMAGES) {
-                notify('Too many images', 'Please choose at most ' + MAX_IMAGES + ' images.', 'warning');
-                input.value = '';
-                return;
+    // Image picker with removable previews: picking more files adds to the
+    // selection, and every thumbnail gets an X to drop a wrong choice. The
+    // real input.files is kept in sync through a DataTransfer.
+    function makePicker(input, holder, single) {
+        var canDT = true;
+        try { new DataTransfer(); } catch (e) { canDT = false; }
+        var files = [];
+
+        function sync() {
+            if (canDT) {
+                var dt = new DataTransfer();
+                files.forEach(function (f) { dt.items.add(f); });
+                input.files = dt.files;
             }
-            files.forEach(function (f) {
-                if (!f.type || f.type.indexOf('image/') !== 0) { return; }
+            render();
+        }
+        function render() {
+            holder.innerHTML = '';
+            files.forEach(function (f, idx) {
                 var wrap = document.createElement('span');
                 wrap.className = 'pv';
                 var img = document.createElement('img');
                 img.src = URL.createObjectURL(f);
                 wrap.appendChild(img);
+                if (canDT) {
+                    var x = document.createElement('button');
+                    x.type = 'button';
+                    x.className = 'pv-x';
+                    x.title = 'Remove this image';
+                    x.innerHTML = '&times;';
+                    x.addEventListener('click', function () {
+                        files.splice(idx, 1);
+                        sync();
+                    });
+                    wrap.appendChild(x);
+                }
                 holder.appendChild(wrap);
             });
+        }
+        input.addEventListener('change', function () {
+            var chosen = Array.prototype.slice.call(input.files || []).filter(function (f) {
+                return f.type && f.type.indexOf('image/') === 0;
+            });
+            if (single) {
+                files = chosen.slice(0, 1);
+            } else if (canDT) {
+                chosen.forEach(function (f) {
+                    var dup = files.some(function (g) { return g.name === f.name && g.size === f.size; });
+                    if (!dup) { files.push(f); }
+                });
+                if (files.length > MAX_IMAGES) {
+                    notify('Too many images', 'Only ' + MAX_IMAGES + ' images are allowed, extra ones were dropped.', 'warning');
+                    files = files.slice(0, MAX_IMAGES);
+                }
+            } else {
+                if (chosen.length > MAX_IMAGES) {
+                    notify('Too many images', 'Please choose at most ' + MAX_IMAGES + ' images.', 'warning');
+                    chosen = chosen.slice(0, MAX_IMAGES);
+                }
+                files = chosen;
+            }
+            sync();
         });
     }
-    bindPreview(document.getElementById('images'), document.getElementById('imagePreviews'), false);
-    bindPreview(document.getElementById('support_screenshot'), document.getElementById('supportPreview'), true);
+    makePicker(document.getElementById('images'), document.getElementById('imagePreviews'), false);
+    makePicker(document.getElementById('support_screenshot'), document.getElementById('supportPreview'), true);
 
     var supportInput = document.getElementById('support_screenshot');
 

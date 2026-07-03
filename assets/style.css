@@ -498,3 +498,12 @@ a.stat-link b { color: #2ea6ff; }
     .forum-count { display: none; }
     .forum-toolbar .btn.new-esc { width: 100%; text-align: center; }
 }
+
+/* Removable image previews */
+.previews .pv { position: relative; display: inline-block; }
+.pv-x {
+    position: absolute; top: -7px; right: -7px; width: 20px; height: 20px;
+    border-radius: 50%; background: var(--red); color: #ffffff; border: none;
+    font-size: 13px; line-height: 1; cursor: pointer; padding: 0;
+}
+.pv-x:hover { opacity: .85; }
