@@ -83,9 +83,9 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
         <?php $hasOfficial = (string)$row['official_reply'] !== '' && $row['official_reply'] !== null; ?>
         <?php if ($hasOfficial): ?>
         <div class="tl-item">
-            <span class="avatar big" style="background:var(--green);color:#06281c;">IL</span>
+            <span class="avatar big" style="background:var(--green);color:#06281c;">FR</span>
             <div class="comment staff">
-                <div class="comment-head"><b>ISP Ledger team</b> <span class="staff-badge">Staff</span><?php echo $row['replied_at'] ? ' &middot; ' . e(timeAgo($row['replied_at'])) : ''; ?></div>
+                <div class="comment-head"><b>freeispradius team</b> <span class="staff-badge">Staff</span><?php echo $row['replied_at'] ? ' &middot; ' . e(timeAgo($row['replied_at'])) : ''; ?></div>
                 <div class="comment-body"><?php echo e($row['official_reply']); ?></div>
             </div>
         </div>
@@ -95,13 +95,13 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
         <?php foreach ($thread as $r): $isStaff = $r['author_type'] === 'staff'; ?>
         <div class="tl-item">
             <?php if ($isStaff): ?>
-                <span class="avatar big" style="background:var(--green);color:#06281c;">IL</span>
+                <span class="avatar big" style="background:var(--green);color:#06281c;">FR</span>
             <?php else: ?>
                 <span class="avatar big" style="background:<?php echo nameColor($row['company_name']); ?>;"><?php echo e(avatarInitial($row['company_name'])); ?></span>
             <?php endif; ?>
             <div class="comment <?php echo $isStaff ? 'staff' : ''; ?>">
                 <div class="comment-head">
-                    <b><?php echo $isStaff ? 'ISP Ledger team' : e($r['author_name'] !== '' ? $r['author_name'] : $row['company_name']); ?></b>
+                    <b><?php echo $isStaff ? 'freeispradius team' : e($r['author_name'] !== '' ? $r['author_name'] : $row['company_name']); ?></b>
                     <?php if ($isStaff): ?><span class="staff-badge">Staff</span><?php else: ?> responded from their panel<?php endif; ?>
                     &middot; <?php echo e(timeAgo($r['created_at'])); ?>
                 </div>
@@ -119,7 +119,7 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
 
         <div class="tl-event">
             <span class="dot"></span>
-            Replies here come only from the company's own billing panel and the ISP Ledger team. The wall itself does not accept replies, so there is no spam.
+            Replies here come only from the company's own billing panel and the freeispradius team. The wall itself does not accept replies, so there is no spam.
         </div>
     </div>
 

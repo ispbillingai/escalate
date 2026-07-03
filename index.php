@@ -76,7 +76,7 @@ $filterUrl = function (array $overrides = []) use ($status, $topic, $q, $sort) {
     return 'index.php' . ($params ? ('?' . http_build_query($params)) : '') . '#wall';
 };
 
-pageHeader('Escalate by ISP Ledger: public escalation wall', 'wall');
+pageHeader('Escalate by freeispradius: public escalation wall', 'wall');
 ?>
 
 <section class="hero">
@@ -85,6 +85,7 @@ pageHeader('Escalate by ISP Ledger: public escalation wall', 'wall');
     <p class="sub">Every escalation raised here is published for everyone to see and posted straight to our Telegram channel. No queue, no silence: leadership sees it, the community sees it, and you get called back.</p>
     <div class="pledge">
         <p><b>A promise from us.</b> Every customer matters to us, and we work hard to give each one a great experience. Once in a while we may still miss the mark, and when that happens we would rather hear about it loudly than have you feel unheard. This platform is our promise that no concern ever dies in a queue: raise it here in the open and we will do everything in our power to make it right.</p>
+        <p style="margin-top:10px;"><b>Marked as fixed, but it is not?</b> Sometimes support closes an issue as resolved while on your side it is not. Top management wants to hear about exactly that, loudly, right here, so we can check it ourselves.</p>
     </div>
     <div class="hero-actions">
         <a class="btn" href="submit.php">Raise an Escalation</a>

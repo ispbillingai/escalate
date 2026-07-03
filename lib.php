@@ -242,7 +242,7 @@ function postThreadReplyToTelegram(array $row, $authorType, $authorName, $body)
 {
     try {
         $who = $authorType === 'staff'
-            ? 'ISP Ledger team (staff)'
+            ? 'freeispradius team (staff)'
             : ($authorName !== '' ? $authorName : $row['company_name']) . ' (from their billing panel)';
         $text = "REPLY ON ESCALATION #" . $row['public_id'] . "\n"
             . "From: " . $who . "\n"
@@ -677,7 +677,7 @@ function pageHeader($title, $active = '')
         . '</head><body><div class="stars" aria-hidden="true"></div>'
         . '<header class="topbar"><div class="wrap topbar-inner">'
         . '<a class="brand" href="index.php"><span class="brand-icon">&#128752;</span>'
-        . '<span class="brand-text">Escalate<small>by ISP Ledger</small></span></a>'
+        . '<span class="brand-text">Escalate<small>by freeispradius</small></span></a>'
         . '<nav class="nav">'
         . $nav('wall', 'index.php', 'Escalation Wall')
         . $nav('submit', 'submit.php', 'Raise an Escalation')

@@ -40,6 +40,7 @@ pageHeader('Raise an escalation', 'submit');
     <p class="sub">Tried normal support and got nowhere? Put it on the record. Your escalation goes public here and lands in our Telegram channel the second you press launch.</p>
     <div class="pledge">
         <p><b>A promise from us.</b> We care deeply about getting things right for you, and if support has left you frustrated we genuinely want to know. This page exists for exactly those moments: everything raised here goes straight to the top, is treated with the seriousness of a last resort, and we will not rest until it is put right.</p>
+        <p style="margin-top:10px;"><b>Marked as fixed, but it is not?</b> Sometimes support closes an issue as resolved while on your side it is not. Top management wants to hear about exactly that, loudly, right here, so we can check it ourselves.</p>
     </div>
 </section>
 

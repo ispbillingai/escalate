@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
             case 'thread_reply':
                 $body = trim((string)($_POST['reply_body'] ?? ''));
                 if ($body !== '') {
-                    addReply($row, 'staff', 'ISP Ledger team', $body, clientIp());
+                    addReply($row, 'staff', 'freeispradius team', $body, clientIp());
                 }
                 break;
             case 'retry_telegram':
