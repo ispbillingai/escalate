@@ -245,6 +245,12 @@ function telegramChannelUrl()
     return (defined('TELEGRAM_CHANNEL_URL') && TELEGRAM_CHANNEL_URL !== '') ? TELEGRAM_CHANNEL_URL : '';
 }
 
+/** Forum topic (message_thread_id) escalation posts go into, 0 = none. */
+function telegramTopicId()
+{
+    return defined('TELEGRAM_TOPIC_ID') ? (int)TELEGRAM_TOPIC_ID : 0;
+}
+
 /**
  * Member count of the public channel. Bot API when a token is configured,
  * otherwise the t.me preview page. Cached for 6 hours; falls back to the
@@ -333,11 +339,15 @@ function postEscalationToTelegram(array $row)
             . mb_substr((string)$row['issue'], 0, 3300) . "\n\n"
             . escalationUrl($row['public_id']);
 
-        $sent = tgApi('sendMessage', [
+        $params = [
             'chat_id'                  => TELEGRAM_CHAT_ID,
             'text'                     => $text,
             'disable_web_page_preview' => 'true',
-        ]);
+        ];
+        if (telegramTopicId() > 0) {
+            $params['message_thread_id'] = telegramTopicId();
+        }
+        $sent = tgApi('sendMessage', $params);
         if (!$sent || empty($sent['ok'])) {
             return '';
         }
@@ -353,17 +363,24 @@ function postEscalationToTelegram(array $row)
         $paths = array_slice($paths, 0, 10);
 
         if (count($paths) === 1) {
-            tgApi('sendPhoto', [
+            $photoParams = [
                 'chat_id'             => TELEGRAM_CHAT_ID,
                 'photo'               => new CURLFile(__DIR__ . '/' . $paths[0]),
                 'reply_to_message_id' => $messageId,
-            ]);
+            ];
+            if (telegramTopicId() > 0) {
+                $photoParams['message_thread_id'] = telegramTopicId();
+            }
+            tgApi('sendPhoto', $photoParams);
         } elseif (count($paths) > 1) {
             $media = [];
             $params = [
                 'chat_id'             => TELEGRAM_CHAT_ID,
                 'reply_to_message_id' => $messageId,
             ];
+            if (telegramTopicId() > 0) {
+                $params['message_thread_id'] = telegramTopicId();
+            }
             foreach ($paths as $i => $p) {
                 $media[] = ['type' => 'photo', 'media' => 'attach://photo' . $i];
                 $params['photo' . $i] = new CURLFile(__DIR__ . '/' . $p);
@@ -392,6 +409,9 @@ function postReplyToTelegram(array $row, $replyText)
             'text'                     => $text,
             'disable_web_page_preview' => 'true',
         ];
+        if (telegramTopicId() > 0) {
+            $params['message_thread_id'] = telegramTopicId();
+        }
         if ($row['telegram_message_id'] !== '') {
             $params['reply_to_message_id'] = $row['telegram_message_id'];
         }

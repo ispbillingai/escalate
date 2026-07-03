@@ -20,6 +20,11 @@ define('TELEGRAM_CHAT_ID', '@freeispradius');   // channel @username or -100... 
 // Public channel link shown on the site; member count is pulled from it.
 define('TELEGRAM_CHANNEL_URL', 'https://t.me/freeispradius');
 
+// Optional: post into a specific topic of a topics-enabled group. The topic id
+// is the middle number in a message link, e.g. t.me/freeispradius/24886/24893
+// means topic 24886. Leave empty to post to the General topic / plain channel.
+define('TELEGRAM_TOPIC_ID', '');
+
 // Password for the moderation area (admin.php)
 define('ADMIN_PASSWORD', 'change_this_password');
 
