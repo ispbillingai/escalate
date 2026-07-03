@@ -103,96 +103,89 @@ pageHeader('Escalate by ISP Ledger: public escalation wall', 'wall');
     <?php endif; ?>
 </div>
 
-<div id="wall" class="filterbar">
-    <div class="tabs">
-        <a class="tab <?php echo $status === '' ? 'active' : ''; ?>" href="<?php echo e($filterUrl(['status' => '', 'page' => ''])); ?>">All <small>(<?php echo $counts['all']; ?>)</small></a>
-        <a class="tab <?php echo $status === 'open' ? 'active' : ''; ?>" href="<?php echo e($filterUrl(['status' => 'open', 'page' => ''])); ?>">Open <small>(<?php echo $counts['open']; ?>)</small></a>
-        <a class="tab <?php echo $status === 'in_review' ? 'active' : ''; ?>" href="<?php echo e($filterUrl(['status' => 'in_review', 'page' => ''])); ?>">In Review <small>(<?php echo $counts['in_review']; ?>)</small></a>
-        <a class="tab <?php echo $status === 'resolved' ? 'active' : ''; ?>" href="<?php echo e($filterUrl(['status' => 'resolved', 'page' => ''])); ?>">Resolved <small>(<?php echo $counts['resolved']; ?>)</small></a>
-    </div>
-    <form class="searchbox" method="get" action="index.php">
+<div id="wall" class="forum-toolbar">
+    <form class="forum-search" method="get" action="index.php">
         <?php if ($status !== ''): ?><input type="hidden" name="status" value="<?php echo e($status); ?>"><?php endif; ?>
         <?php if ($topic !== ''): ?><input type="hidden" name="topic" value="<?php echo e($topic); ?>"><?php endif; ?>
         <?php if ($sort !== 'newest'): ?><input type="hidden" name="sort" value="<?php echo e($sort); ?>"><?php endif; ?>
-        <input type="text" name="q" value="<?php echo e($q); ?>" placeholder="Search company, topic text, manager or #reference...">
+        <input type="text" name="q" value="<?php echo e($q); ?>" placeholder="Search escalations: company, text, manager or #reference...">
         <button class="btn small" type="submit">Search</button>
     </form>
-</div>
-
-<div class="filterbar" style="margin-top:10px;align-items:center;">
-    <div class="tabs" style="flex-wrap:wrap;">
-        <a class="tab <?php echo $topic === '' ? 'active' : ''; ?>" href="<?php echo e($filterUrl(['topic' => '', 'page' => ''])); ?>">All topics</a>
-        <?php foreach ($topics as $t): ?>
-        <a class="tab <?php echo $topic === $t ? 'active' : ''; ?>" href="<?php echo e($filterUrl(['topic' => $t, 'page' => ''])); ?>">
-            <?php echo e($t); ?><?php if (!empty($topicCounts[$t])): ?> <small>(<?php echo $topicCounts[$t]; ?>)</small><?php endif; ?>
-        </a>
-        <?php endforeach; ?>
-    </div>
-    <form class="searchbox" method="get" action="index.php" id="sortForm">
+    <form class="forum-filters" method="get" action="index.php" id="filterForm">
         <?php if ($status !== ''): ?><input type="hidden" name="status" value="<?php echo e($status); ?>"><?php endif; ?>
-        <?php if ($topic !== ''): ?><input type="hidden" name="topic" value="<?php echo e($topic); ?>"><?php endif; ?>
         <?php if ($q !== ''): ?><input type="hidden" name="q" value="<?php echo e($q); ?>"><?php endif; ?>
-        <select name="sort" onchange="document.getElementById('sortForm').submit();" aria-label="Sort escalations">
-            <option value="newest" <?php echo $sort === 'newest' ? 'selected' : ''; ?>>Newest first</option>
-            <option value="oldest" <?php echo $sort === 'oldest' ? 'selected' : ''; ?>>Oldest first</option>
+        <select name="topic" onchange="document.getElementById('filterForm').submit();" aria-label="Filter by topic">
+            <option value="">All topics</option>
+            <?php foreach ($topics as $t): ?>
+                <option value="<?php echo e($t); ?>" <?php echo $topic === $t ? 'selected' : ''; ?>>
+                    <?php echo e($t); ?><?php echo !empty($topicCounts[$t]) ? ' (' . $topicCounts[$t] . ')' : ''; ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <select name="sort" onchange="document.getElementById('filterForm').submit();" aria-label="Sort escalations">
+            <option value="newest" <?php echo $sort === 'newest' ? 'selected' : ''; ?>>Newest</option>
+            <option value="oldest" <?php echo $sort === 'oldest' ? 'selected' : ''; ?>>Oldest</option>
             <option value="updated" <?php echo $sort === 'updated' ? 'selected' : ''; ?>>Recently updated</option>
         </select>
     </form>
+    <a class="btn new-esc" href="submit.php">Raise an Escalation</a>
 </div>
 
-<?php if ($q !== '' || $topic !== '' || $status !== ''): ?>
-<p style="color:var(--muted);font-size:13.5px;margin:12px 2px;">
-    <?php echo $total; ?> escalation<?php echo $total === 1 ? '' : 's'; ?> found
-    <?php if ($q !== ''): ?> for "<b><?php echo e($q); ?></b>"<?php endif; ?>
-    <?php if ($topic !== ''): ?> in <b><?php echo e($topic); ?></b><?php endif; ?>
-    &middot; <a class="readmore" href="index.php#wall">Clear filters</a>
-</p>
-<?php endif; ?>
+<div class="forum-box">
+    <div class="forum-head">
+        <a class="fstate <?php echo $status === '' ? 'active' : ''; ?>" href="<?php echo e($filterUrl(['status' => '', 'page' => ''])); ?>">All <b><?php echo $counts['all']; ?></b></a>
+        <a class="fstate <?php echo $status === 'open' ? 'active' : ''; ?>" href="<?php echo e($filterUrl(['status' => 'open', 'page' => ''])); ?>"><span class="st-open">&#9679;</span> Open <b><?php echo $counts['open']; ?></b></a>
+        <a class="fstate <?php echo $status === 'in_review' ? 'active' : ''; ?>" href="<?php echo e($filterUrl(['status' => 'in_review', 'page' => ''])); ?>"><span class="st-review">&#9685;</span> In Review <b><?php echo $counts['in_review']; ?></b></a>
+        <a class="fstate <?php echo $status === 'resolved' ? 'active' : ''; ?>" href="<?php echo e($filterUrl(['status' => 'resolved', 'page' => ''])); ?>"><span class="st-resolved">&#10004;</span> Resolved <b><?php echo $counts['resolved']; ?></b></a>
+        <span class="forum-count">
+            <?php if ($q !== '' || $topic !== ''): ?>
+                <?php echo $total; ?> found<?php echo $topic !== '' ? ' in ' . e($topic) : ''; ?> &middot; <a href="index.php#wall" style="color:var(--accent);">clear</a>
+            <?php else: ?>
+                <?php echo $total; ?> escalation<?php echo $total === 1 ? '' : 's'; ?>
+            <?php endif; ?>
+        </span>
+    </div>
 
-<?php if (!$rows): ?>
-    <div class="empty">
+    <?php if (!$rows): ?>
+    <div class="forum-empty">
         <div class="big">&#128752;</div>
-        <p>Nothing here yet<?php echo ($q !== '' || $status !== '') ? ' for this filter' : ''; ?>.</p>
+        <p>Nothing here<?php echo ($q !== '' || $status !== '' || $topic !== '') ? ' for this filter' : ' yet'; ?>.</p>
         <p><a class="readmore" href="submit.php">Be the first to raise an escalation</a></p>
     </div>
-<?php else: ?>
-    <div class="grid">
+    <?php else: ?>
         <?php foreach ($rows as $row):
             $meta = statusMeta($row['status']);
             $imgs = imagesOf($row);
             $url = 'view.php?id=' . rawurlencode($row['public_id']);
+            $hasReply = (string)$row['official_reply'] !== '' && $row['official_reply'] !== null;
+            $tcolor = nameColor((string)($row['topic'] ?? ''));
         ?>
-        <article class="card">
-            <div class="card-head">
-                <div>
-                    <div class="card-company"><?php echo e($row['company_name']); ?></div>
-                    <div class="card-meta">
-                        #<?php echo e($row['public_id']); ?> &middot; <?php echo e(timeAgo($row['created_at'])); ?>
-                        <?php if ((string)($row['topic'] ?? '') !== ''): ?>
-                            &middot; <a class="readmore" href="<?php echo e($filterUrl(['topic' => $row['topic'], 'page' => ''])); ?>"><?php echo e($row['topic']); ?></a>
-                        <?php endif; ?>
-                    </div>
-                </div>
-                <span class="pill <?php echo $meta['class']; ?>"><?php echo $meta['label']; ?></span>
-            </div>
-            <p class="card-issue"><?php echo e(excerptWords($row['issue'], 34)); ?></p>
-            <?php if ($imgs): ?>
-            <div class="thumbs">
-                <?php foreach (array_slice($imgs, 0, 3) as $img): ?>
-                    <img src="<?php echo e($img); ?>" alt="Issue picture" loading="lazy">
-                <?php endforeach; ?>
-                <?php if (count($imgs) > 3): ?><span class="more">+<?php echo count($imgs) - 3; ?></span><?php endif; ?>
-            </div>
-            <?php endif; ?>
-            <div class="card-foot">
-                <a class="readmore" href="<?php echo e($url); ?>">Read full escalation</a>
-                <?php if ((string)$row['official_reply'] !== '' && $row['official_reply'] !== null): ?>
-                    <span class="card-meta">Official reply posted</span>
+        <article class="frow">
+            <span class="frow-state <?php echo $meta['state']; ?>" title="<?php echo $meta['label']; ?>"><?php echo $meta['icon']; ?></span>
+            <div class="frow-main">
+                <a class="frow-title" href="<?php echo e($url); ?>"><?php echo e(excerptWords($row['issue'], 12)); ?></a>
+                <?php if ((string)($row['topic'] ?? '') !== ''): ?>
+                    <a class="tlabel" style="color:<?php echo $tcolor; ?>;border:1px solid <?php echo $tcolor; ?>55;background:<?php echo $tcolor; ?>14;" href="<?php echo e($filterUrl(['topic' => $row['topic'], 'page' => ''])); ?>"><?php echo e($row['topic']); ?></a>
                 <?php endif; ?>
+                <?php if ($hasReply): ?><span class="tlabel replied">Official reply</span><?php endif; ?>
+                <div class="frow-meta">
+                    #<?php echo e($row['public_id']); ?>
+                    &middot; <b style="color:var(--text);font-weight:600;"><?php echo e($row['company_name']); ?></b>
+                    &middot; opened <?php echo e(timeAgo($row['created_at'])); ?>
+                    <?php if ($row['account_manager'] !== ''): ?>&middot; manager <?php echo e($row['account_manager']); ?><?php endif; ?>
+                </div>
+            </div>
+            <div class="frow-side">
+                <?php if ($imgs): ?><span class="fico" title="<?php echo count($imgs); ?> picture(s)">&#128444;&#65039; <?php echo count($imgs); ?></span><?php endif; ?>
+                <span class="fico" title="Official replies">&#128172; <?php echo $hasReply ? 1 : 0; ?></span>
+                <span class="avatar" title="<?php echo e($row['company_name']); ?>" style="background:<?php echo nameColor($row['company_name']); ?>;"><?php echo e(avatarInitial($row['company_name'])); ?></span>
             </div>
         </article>
         <?php endforeach; ?>
-    </div>
+    <?php endif; ?>
+</div>
+
+<?php if ($rows): ?>
 
     <?php if ($pages > 1): ?>
     <div class="pager">

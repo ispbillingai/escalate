@@ -32,53 +32,69 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
         </div>
     <?php endif; ?>
 
+    <?php $tcolor = nameColor((string)($row['topic'] ?? '')); ?>
     <div class="detail-head">
         <div>
-            <h1><?php echo e($row['company_name']); ?></h1>
+            <h1><?php echo e(excerptWords($row['issue'], 12)); ?></h1>
             <div class="meta">
-                Escalation #<?php echo e($row['public_id']); ?>
-                &middot; raised <?php echo e(timeAgo($row['created_at'])); ?>
-                &middot; <?php echo $row['source'] === 'panel' ? 'from their billing panel' : 'on the public platform'; ?>
-                <?php if ((string)($row['topic'] ?? '') !== ''): ?>&middot; <a class="readmore" href="index.php?topic=<?php echo e(rawurlencode($row['topic'])); ?>#wall"><?php echo e($row['topic']); ?></a><?php endif; ?>
+                <span class="pill <?php echo $meta['class']; ?>" style="vertical-align:1px;"><?php echo $meta['icon']; ?> <?php echo $meta['label']; ?></span>
+                &middot; #<?php echo e($row['public_id']); ?>
+                &middot; <b style="color:var(--text);"><?php echo e($row['company_name']); ?></b>
+                &middot; opened <?php echo e(timeAgo($row['created_at'])); ?>
+                <?php echo $row['source'] === 'panel' ? 'from their billing panel' : 'on the public platform'; ?>
+                <?php if ((string)($row['topic'] ?? '') !== ''): ?>
+                    &middot; <a class="tlabel" style="color:<?php echo $tcolor; ?>;border:1px solid <?php echo $tcolor; ?>55;background:<?php echo $tcolor; ?>14;" href="index.php?topic=<?php echo e(rawurlencode($row['topic'])); ?>#wall"><?php echo e($row['topic']); ?></a>
+                <?php endif; ?>
                 <?php if ($row['account_manager'] !== ''): ?>&middot; account manager <?php echo e($row['account_manager']); ?><?php endif; ?>
                 &middot; follow-up <?php echo e(maskPhone($row['follow_up_number'])); ?>
             </div>
         </div>
-        <span class="pill <?php echo $meta['class']; ?>"><?php echo $meta['label']; ?></span>
     </div>
 
-    <div class="section-label">The issue in their words</div>
-    <div class="detail-issue"><?php echo e($row['issue']); ?></div>
-
-    <?php if ($imgs): ?>
-        <div class="section-label">Pictures of the issue</div>
-        <div class="gallery">
-            <?php foreach ($imgs as $img): ?>
-                <a href="<?php echo e($img); ?>" class="zoom"><img src="<?php echo e($img); ?>" alt="Issue picture" loading="lazy"></a>
-            <?php endforeach; ?>
+    <div class="thread">
+        <div class="tl-item">
+            <span class="avatar big" style="background:<?php echo nameColor($row['company_name']); ?>;"><?php echo e(avatarInitial($row['company_name'])); ?></span>
+            <div class="comment">
+                <div class="comment-head"><b><?php echo e($row['company_name']); ?></b> opened this escalation &middot; <?php echo e(timeAgo($row['created_at'])); ?></div>
+                <div class="comment-body"><?php echo e($row['issue']); ?><?php if ($imgs): ?>
+                    <div class="gallery">
+                        <?php foreach ($imgs as $img): ?>
+                            <a href="<?php echo e($img); ?>" class="zoom"><img src="<?php echo e($img); ?>" alt="Issue picture" loading="lazy"></a>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?></div>
+            </div>
         </div>
-    <?php endif; ?>
 
-    <div class="section-label">What normal support said</div>
-    <?php if ($row['support_screenshot'] !== ''): ?>
-        <div class="gallery">
-            <a href="<?php echo e($row['support_screenshot']); ?>" class="zoom">
-                <img src="<?php echo e($row['support_screenshot']); ?>" alt="Reply received from support" loading="lazy">
-            </a>
+        <div class="tl-item">
+            <span class="avatar big" style="background:#3a4664;color:#e8ecf7;">&#127911;</span>
+            <div class="comment">
+                <div class="comment-head"><b>What normal support said</b> &middot; screenshot provided by the company</div>
+                <div class="comment-body"><?php if ($row['support_screenshot'] !== ''): ?>
+                    <div class="gallery" style="margin-top:0;">
+                        <a href="<?php echo e($row['support_screenshot']); ?>" class="zoom">
+                            <img src="<?php echo e($row['support_screenshot']); ?>" alt="Reply received from support" loading="lazy">
+                        </a>
+                    </div>
+                <?php else: ?>No support reply screenshot was attached.<?php endif; ?></div>
+            </div>
         </div>
-    <?php else: ?>
-        <div class="notice">No support reply screenshot was attached.</div>
-    <?php endif; ?>
 
-    <div class="section-label">Official response</div>
-    <?php if ((string)$row['official_reply'] !== '' && $row['official_reply'] !== null): ?>
-        <div class="reply-box">
-            <div class="who">ISP Ledger team<?php echo $row['replied_at'] ? ' &middot; ' . e(timeAgo($row['replied_at'])) : ''; ?></div>
-            <p><?php echo e($row['official_reply']); ?></p>
+        <?php if ((string)$row['official_reply'] !== '' && $row['official_reply'] !== null): ?>
+        <div class="tl-item">
+            <span class="avatar big" style="background:var(--green);color:#06281c;">IL</span>
+            <div class="comment staff">
+                <div class="comment-head"><b>ISP Ledger team</b> <span class="staff-badge">Staff</span><?php echo $row['replied_at'] ? ' &middot; ' . e(timeAgo($row['replied_at'])) : ''; ?></div>
+                <div class="comment-body"><?php echo e($row['official_reply']); ?></div>
+            </div>
         </div>
-    <?php else: ?>
-        <div class="notice">The team has not posted a public response here yet. Escalations are reviewed every day and the follow-up number is called directly.</div>
-    <?php endif; ?>
+        <?php else: ?>
+        <div class="tl-event">
+            <span class="dot"></span>
+            The team has not posted a public response here yet. Escalations are reviewed every day and the follow-up number is called directly.
+        </div>
+        <?php endif; ?>
+    </div>
 
     <div style="margin-top:28px;display:flex;gap:10px;flex-wrap:wrap;">
         <a class="btn ghost" href="index.php">Back to the wall</a>

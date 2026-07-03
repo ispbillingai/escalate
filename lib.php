@@ -126,12 +126,26 @@ function statusMeta($status)
 {
     switch ($status) {
         case 'resolved':
-            return ['label' => 'Resolved', 'class' => 'pill-resolved'];
+            return ['label' => 'Resolved', 'class' => 'pill-resolved', 'icon' => '&#10004;', 'state' => 'st-resolved'];
         case 'in_review':
-            return ['label' => 'In Review', 'class' => 'pill-review'];
+            return ['label' => 'In Review', 'class' => 'pill-review', 'icon' => '&#9685;', 'state' => 'st-review'];
         default:
-            return ['label' => 'Open', 'class' => 'pill-open'];
+            return ['label' => 'Open', 'class' => 'pill-open', 'icon' => '&#9679;', 'state' => 'st-open'];
     }
+}
+
+/** Flat avatar/label color, deterministic per name. */
+function nameColor($name)
+{
+    $palette = ['#5b8cff', '#2ee6a8', '#ffb02e', '#ff5d73', '#b58cff', '#4dd0e1', '#f472b6', '#9ccc65'];
+    return $palette[abs(crc32(strtolower((string)$name))) % count($palette)];
+}
+
+/** Uppercase first letter for the avatar circle. */
+function avatarInitial($name)
+{
+    $c = mb_strtoupper(mb_substr(trim((string)$name), 0, 1));
+    return $c !== '' ? $c : '?';
 }
 
 function excerptWords($text, $words = 40)
