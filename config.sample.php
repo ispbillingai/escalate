@@ -20,9 +20,6 @@ define('TELEGRAM_CHAT_ID', '@freeispradius');   // channel @username or -100... 
 // Public channel link shown on the site; member count is pulled from it.
 define('TELEGRAM_CHANNEL_URL', 'https://t.me/freeispradius');
 
-// Shared key the billing panels send when submitting on behalf of a tenant
-define('PANEL_API_KEY', 'change_this_key');
-
 // Password for the moderation area (admin.php)
 define('ADMIN_PASSWORD', 'change_this_password');
 

@@ -37,7 +37,7 @@ Public escalation platform for escalate.ispledger.com. When a customer feels nor
    GRANT ALL PRIVILEGES ON escalate.* TO 'escalate'@'localhost';
    ```
 
-2. `cp config.sample.php config.php` and fill in the database credentials, `BASE_URL`, `PANEL_API_KEY` and `ADMIN_PASSWORD`. The table is auto-created on first hit.
+2. `cp config.sample.php config.php` and fill in the database credentials, `BASE_URL` and `ADMIN_PASSWORD`. The table is auto-created on first hit.
 
 3. Make uploads writable by the web user: `chown -R www-data:www-data uploads`.
 
@@ -80,7 +80,6 @@ Also raise PHP upload limits in php.ini so 4 pictures plus a screenshot fit: `up
 Create (multipart POST to `/api.php`):
 
 ```
-key=PANEL_API_KEY
 company_name=Skyline WiFi Ltd
 subdomain=skyline
 follow_up_number=+254712345678

@@ -2,7 +2,7 @@
 // JSON API for the billing panels.
 //
 // POST (multipart/form-data)  -> create an escalation on behalf of a tenant.
-//   fields: key, company_name, subdomain, follow_up_number, issue, account_manager
+//   fields: company_name, subdomain, follow_up_number, issue, account_manager, topic
 //   files:  images[] (1..MAX_IMAGES), support_screenshot (required)
 //
 // GET ?action=list&sub=<subdomain>  -> that tenant's escalations (public data only)
@@ -69,10 +69,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     jout(['ok' => false, 'error' => 'POST required.'], 405);
-}
-
-if (!hash_equals(PANEL_API_KEY, (string)($_POST['key'] ?? ''))) {
-    jout(['ok' => false, 'error' => 'Invalid API key.'], 403);
 }
 
 $issueFiles = normalizeFilesArray($_FILES['images'] ?? null);
