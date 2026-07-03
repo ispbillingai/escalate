@@ -3,7 +3,7 @@
 require_once __DIR__ . '/lib.php';
 
 $errors = [];
-$old = ['company_name' => '', 'subdomain' => '', 'follow_up_number' => '', 'issue' => '', 'account_manager' => '', 'topic' => ''];
+$old = ['company_name' => '', 'subdomain' => '', 'follow_up_number' => '', 'issue' => '', 'account_manager' => '', 'topic' => '', 'router' => ''];
 $managers = accountManagers();
 $topics = escalationTopics();
 $domain = panelDomain();
@@ -79,6 +79,11 @@ pageHeader('Raise an escalation', 'submit');
                     <option value="<?php echo e($t); ?>" <?php echo $old['topic'] === $t ? 'selected' : ''; ?>><?php echo e($t); ?></option>
                 <?php endforeach; ?>
             </select>
+        </div>
+
+        <div class="field">
+            <label for="router">Which router is this about? <small>(optional)</small></label>
+            <input type="text" id="router" name="router" maxlength="120" value="<?php echo e($old['router']); ?>" placeholder="Router name as it appears in your panel, leave empty if not router-specific">
         </div>
 
         <div class="field">

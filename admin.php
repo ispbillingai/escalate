@@ -141,6 +141,7 @@ pageHeader('Escalations moderation', '');
                 #<?php echo e($row['public_id']); ?> &middot; <?php echo e($row['created_at']); ?> &middot; <?php echo e($row['source']); ?>
                 <?php echo $row['subdomain'] !== '' ? '&middot; ' . e($row['subdomain']) : ''; ?>
                 <?php echo (string)($row['topic'] ?? '') !== '' ? '&middot; ' . e($row['topic']) : ''; ?>
+                <?php echo (string)($row['router'] ?? '') !== '' ? '&middot; router ' . e($row['router']) : ''; ?>
                 <?php echo $row['telegram_message_id'] === '' ? '&middot; <span style="color:var(--amber)">not on Telegram</span>' : ''; ?>
             </span>
             <p style="margin-top:6px;color:#c6d1e8;"><?php echo e(excerptWords($row['issue'], 45)); ?></p>

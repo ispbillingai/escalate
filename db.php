@@ -33,6 +33,7 @@ function getDB()
         support_screenshot VARCHAR(255) NOT NULL DEFAULT '',
         account_manager VARCHAR(120) NOT NULL DEFAULT '',
         topic VARCHAR(60) NOT NULL DEFAULT '',
+        router VARCHAR(120) NOT NULL DEFAULT '',
         no_support_reply TINYINT(1) NOT NULL DEFAULT 0,
         source VARCHAR(10) NOT NULL DEFAULT 'web',
         submit_ip VARCHAR(45) NOT NULL DEFAULT '',
@@ -67,6 +68,7 @@ function getDB()
     $lateColumns = [
         'account_manager' => "ADD COLUMN account_manager VARCHAR(120) NOT NULL DEFAULT '' AFTER support_screenshot",
         'topic'           => "ADD COLUMN topic VARCHAR(60) NOT NULL DEFAULT '' AFTER account_manager, ADD KEY idx_topic (topic)",
+        'router'          => "ADD COLUMN router VARCHAR(120) NOT NULL DEFAULT '' AFTER topic",
     ];
     foreach ($lateColumns as $name => $ddl) {
         try {

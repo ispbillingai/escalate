@@ -46,6 +46,7 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
                     &middot; <a class="tlabel" style="color:<?php echo $tcolor; ?>;border:1px solid <?php echo $tcolor; ?>55;background:<?php echo $tcolor; ?>14;" href="index.php?topic=<?php echo e(rawurlencode($row['topic'])); ?>#wall"><?php echo e($row['topic']); ?></a>
                 <?php endif; ?>
                 <?php if ($row['account_manager'] !== ''): ?>&middot; account manager <?php echo e($row['account_manager']); ?><?php endif; ?>
+                <?php if ((string)($row['router'] ?? '') !== ''): ?>&middot; router <?php echo e($row['router']); ?><?php endif; ?>
                 &middot; follow-up <?php echo e(maskPhone($row['follow_up_number'])); ?>
             </div>
         </div>

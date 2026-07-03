@@ -433,6 +433,7 @@ function postEscalationToTelegram(array $row)
             . ($row['subdomain'] !== '' ? "Panel: " . $row['subdomain'] . "." . panelDomain() . "\n" : '')
             . "Account manager: " . ($row['account_manager'] !== '' ? $row['account_manager'] : 'not set') . "\n"
             . "Topic: " . (($row['topic'] ?? '') !== '' ? $row['topic'] : 'Other') . "\n"
+            . (($row['router'] ?? '') !== '' ? "Router: " . $row['router'] . "\n" : '')
             . "Follow-up number: " . $row['follow_up_number'] . "\n"
             . "Raised: " . ($row['source'] === 'panel' ? 'from their billing panel' : 'on the public platform') . "\n"
             . "Pictures of the issue and the reply support gave follow below.\n\n"
@@ -561,6 +562,7 @@ function createEscalation(array $in, array $issueFiles, $supportFile, $source)
     $issue = trim((string)($in['issue'] ?? ''));
     $manager = trim((string)($in['account_manager'] ?? ''));
     $topic = trim((string)($in['topic'] ?? ''));
+    $router = mb_substr(trim((string)($in['router'] ?? '')), 0, 120);   // optional
 
     if ($source === 'panel') {
         // Panels are key-authenticated and send their own subdomain; some run
@@ -637,11 +639,11 @@ function createEscalation(array $in, array $issueFiles, $supportFile, $source)
     $db = getDB();
     $stmt = $db->prepare("INSERT INTO escalations
         (public_id, company_name, subdomain, follow_up_number, issue, images_json,
-         support_screenshot, account_manager, topic, source, submit_ip)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)");
+         support_screenshot, account_manager, topic, router, source, submit_ip)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
     $stmt->execute([
         $publicId, $company, $sub, $phone, $issue, json_encode($saved),
-        $supportPath, $manager, $topic, $source === 'panel' ? 'panel' : 'web', $ip,
+        $supportPath, $manager, $topic, $router, $source === 'panel' ? 'panel' : 'web', $ip,
     ]);
 
     $row = $db->prepare("SELECT * FROM escalations WHERE public_id = ?");
