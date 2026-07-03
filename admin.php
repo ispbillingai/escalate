@@ -52,6 +52,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
                     postReplyToTelegram($row, $reply);
                 }
                 break;
+            case 'thread_reply':
+                $body = trim((string)($_POST['reply_body'] ?? ''));
+                if ($body !== '') {
+                    addReply($row, 'staff', 'ISP Ledger team', $body, clientIp());
+                }
+                break;
             case 'retry_telegram':
                 if ($row['telegram_message_id'] === '') {
                     $messageId = postEscalationToTelegram($row);
@@ -101,6 +107,7 @@ $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 $stmt = $db->prepare("SELECT * FROM escalations $whereSql ORDER BY id DESC LIMIT 200");
 $stmt->execute($args);
 $rows = $stmt->fetchAll();
+$adminThreads = repliesForAll(array_column($rows, 'id'));
 $backQs = http_build_query(array_filter(['status' => $status, 'q' => $aq]));
 
 pageHeader('Escalations moderation', '');
@@ -137,6 +144,18 @@ pageHeader('Escalations moderation', '');
                 <?php echo $row['telegram_message_id'] === '' ? '&middot; <span style="color:var(--amber)">not on Telegram</span>' : ''; ?>
             </span>
             <p style="margin-top:6px;color:#c6d1e8;"><?php echo e(excerptWords($row['issue'], 45)); ?></p>
+            <?php $tRep = $adminThreads[(int)$row['id']] ?? []; ?>
+            <?php if ($tRep): ?>
+                <div style="margin-top:6px;border-left:2px solid var(--border);padding-left:8px;">
+                <?php foreach (array_slice($tRep, -3) as $r): ?>
+                    <div style="font-size:12px;color:<?php echo $r['author_type'] === 'staff' ? 'var(--green)' : 'var(--muted)'; ?>;">
+                        <b><?php echo $r['author_type'] === 'staff' ? 'Staff' : e($r['author_name'] !== '' ? $r['author_name'] : $row['company_name']); ?>:</b>
+                        <?php echo e(excerptWords($r['body'], 18)); ?>
+                    </div>
+                <?php endforeach; ?>
+                <?php if (count($tRep) > 3): ?><div style="font-size:11.5px;color:var(--muted);"><?php echo count($tRep) - 3; ?> earlier repl<?php echo count($tRep) - 3 === 1 ? 'y' : 'ies'; ?> on the public page</div><?php endif; ?>
+                </div>
+            <?php endif; ?>
             <a class="readmore" href="view.php?id=<?php echo e(rawurlencode($row['public_id'])); ?>" target="_blank">Open public page</a>
         </td>
         <td style="white-space:nowrap;">
@@ -158,6 +177,13 @@ pageHeader('Escalations moderation', '');
                 </select>
                 <textarea name="official_reply" rows="3" style="width:100%;margin:8px 0;" placeholder="Official public reply (also posted to Telegram)"><?php echo e((string)$row['official_reply']); ?></textarea>
                 <button class="btn small" type="submit">Save</button>
+            </form>
+            <form method="post" action="admin.php" style="margin-top:8px;">
+                <input type="hidden" name="do" value="thread_reply">
+                <input type="hidden" name="rid" value="<?php echo (int)$row['id']; ?>">
+                <input type="hidden" name="back" value="<?php echo e($backQs); ?>">
+                <textarea name="reply_body" rows="2" style="width:100%;margin:0 0 6px;" placeholder="Post a reply in the public thread (also goes to Telegram)"></textarea>
+                <button class="btn small" type="submit">Post reply</button>
             </form>
             <form method="post" action="admin.php" style="display:inline-block;margin-top:8px;">
                 <input type="hidden" name="do" value="retry_telegram">

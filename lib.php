@@ -167,6 +167,106 @@ function imagesOf(array $row)
 }
 
 // ---------------------------------------------------------------------------
+// Thread replies. The wall never accepts replies directly: companies reply
+// from their billing panel and staff from admin.php, so everything published
+// went through our servers.
+
+/** Replies for one escalation, oldest first. */
+function repliesOf($escalationId, $limit = 100)
+{
+    $stmt = getDB()->prepare("SELECT author_type, author_name, body, created_at
+        FROM escalation_replies WHERE escalation_id = ? ORDER BY id ASC LIMIT " . (int)$limit);
+    $stmt->execute([(int)$escalationId]);
+    return $stmt->fetchAll();
+}
+
+/** Replies for many escalations at once, keyed by escalation id. */
+function repliesForAll(array $escalationIds, $limitPer = 30)
+{
+    $out = [];
+    $ids = array_values(array_filter(array_map('intval', $escalationIds)));
+    if (!$ids) {
+        return $out;
+    }
+    $marks = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = getDB()->prepare("SELECT escalation_id, author_type, author_name, body, created_at
+        FROM escalation_replies WHERE escalation_id IN ($marks) ORDER BY id ASC");
+    $stmt->execute($ids);
+    foreach ($stmt->fetchAll() as $r) {
+        $eid = (int)$r['escalation_id'];
+        if (count($out[$eid] ?? []) < $limitPer) {
+            $out[$eid][] = $r;
+        }
+    }
+    return $out;
+}
+
+/**
+ * Add a reply to an escalation and post it to Telegram (best effort).
+ * Returns [ok(bool), errorOrReplyRow].
+ */
+function addReply(array $row, $authorType, $authorName, $body, $ip)
+{
+    $body = trim((string)$body);
+    $authorType = $authorType === 'staff' ? 'staff' : 'company';
+    $authorName = mb_substr(trim((string)$authorName), 0, 160);
+    if (mb_strlen($body) < 2) {
+        return [false, 'Write the reply first.'];
+    }
+    if (mb_strlen($body) > 4000) {
+        return [false, 'Keep the reply under 4000 characters.'];
+    }
+    $db = getDB();
+    try {
+        $stmt = $db->prepare("SELECT COUNT(*) FROM escalation_replies WHERE submit_ip = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)");
+        $stmt->execute([$ip]);
+        if ($authorType !== 'staff' && (int)$stmt->fetchColumn() >= 20) {
+            return [false, 'Too many replies from this connection in the last hour. Please try again later.'];
+        }
+        $stmt = $db->prepare("SELECT COUNT(*) FROM escalation_replies WHERE escalation_id = ?");
+        $stmt->execute([(int)$row['id']]);
+        if ((int)$stmt->fetchColumn() >= 100) {
+            return [false, 'This escalation already has the maximum number of replies.'];
+        }
+    } catch (Throwable $ex) {
+        error_log('[escalate] reply rate check failed: ' . $ex->getMessage());
+    }
+    $stmt = $db->prepare("INSERT INTO escalation_replies (escalation_id, author_type, author_name, body, submit_ip) VALUES (?,?,?,?,?)");
+    $stmt->execute([(int)$row['id'], $authorType, $authorName, $body, substr((string)$ip, 0, 45)]);
+    postThreadReplyToTelegram($row, $authorType, $authorName, $body);
+    return [true, ['author_type' => $authorType, 'author_name' => $authorName, 'body' => $body, 'created_at' => date('Y-m-d H:i:s')]];
+}
+
+/** Post a thread reply under the original channel message. Best effort. */
+function postThreadReplyToTelegram(array $row, $authorType, $authorName, $body)
+{
+    try {
+        $who = $authorType === 'staff'
+            ? 'ISP Ledger team (staff)'
+            : ($authorName !== '' ? $authorName : $row['company_name']) . ' (from their billing panel)';
+        $text = "REPLY ON ESCALATION #" . $row['public_id'] . "\n"
+            . "From: " . $who . "\n"
+            . "Company: " . $row['company_name'] . "\n\n"
+            . mb_substr((string)$body, 0, 3500) . "\n\n"
+            . escalationUrl($row['public_id']);
+        $params = [
+            'chat_id'                  => TELEGRAM_CHAT_ID,
+            'text'                     => $text,
+            'disable_web_page_preview' => 'true',
+        ];
+        if (telegramTopicId() > 0) {
+            $params['message_thread_id'] = telegramTopicId();
+        }
+        if ($row['telegram_message_id'] !== '') {
+            $params['reply_to_message_id'] = $row['telegram_message_id'];
+        }
+        tgApi('sendMessage', $params);
+    } catch (Throwable $ex) {
+        error_log('[escalate] telegram thread reply failed: ' . $ex->getMessage());
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Uploads
 
 function detectImageExt($tmpPath)

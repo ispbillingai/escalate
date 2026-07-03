@@ -50,6 +50,19 @@ function getDB()
         KEY idx_ip_created (submit_ip, created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+    $pdo->exec("CREATE TABLE IF NOT EXISTS escalation_replies (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        escalation_id BIGINT UNSIGNED NOT NULL,
+        author_type VARCHAR(10) NOT NULL DEFAULT 'company',
+        author_name VARCHAR(160) NOT NULL DEFAULT '',
+        body TEXT NOT NULL,
+        submit_ip VARCHAR(45) NOT NULL DEFAULT '',
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_esc (escalation_id),
+        KEY idx_created (created_at),
+        KEY idx_ip_created (submit_ip, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
     // Columns added after first release; heal older installs in place.
     $lateColumns = [
         'account_manager' => "ADD COLUMN account_manager VARCHAR(120) NOT NULL DEFAULT '' AFTER support_screenshot",

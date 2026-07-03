@@ -80,7 +80,8 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
             </div>
         </div>
 
-        <?php if ((string)$row['official_reply'] !== '' && $row['official_reply'] !== null): ?>
+        <?php $hasOfficial = (string)$row['official_reply'] !== '' && $row['official_reply'] !== null; ?>
+        <?php if ($hasOfficial): ?>
         <div class="tl-item">
             <span class="avatar big" style="background:var(--green);color:#06281c;">IL</span>
             <div class="comment staff">
@@ -88,12 +89,38 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
                 <div class="comment-body"><?php echo e($row['official_reply']); ?></div>
             </div>
         </div>
-        <?php else: ?>
+        <?php endif; ?>
+
+        <?php $thread = repliesOf($row['id']); ?>
+        <?php foreach ($thread as $r): $isStaff = $r['author_type'] === 'staff'; ?>
+        <div class="tl-item">
+            <?php if ($isStaff): ?>
+                <span class="avatar big" style="background:var(--green);color:#06281c;">IL</span>
+            <?php else: ?>
+                <span class="avatar big" style="background:<?php echo nameColor($row['company_name']); ?>;"><?php echo e(avatarInitial($row['company_name'])); ?></span>
+            <?php endif; ?>
+            <div class="comment <?php echo $isStaff ? 'staff' : ''; ?>">
+                <div class="comment-head">
+                    <b><?php echo $isStaff ? 'ISP Ledger team' : e($r['author_name'] !== '' ? $r['author_name'] : $row['company_name']); ?></b>
+                    <?php if ($isStaff): ?><span class="staff-badge">Staff</span><?php else: ?> responded from their panel<?php endif; ?>
+                    &middot; <?php echo e(timeAgo($r['created_at'])); ?>
+                </div>
+                <div class="comment-body"><?php echo e($r['body']); ?></div>
+            </div>
+        </div>
+        <?php endforeach; ?>
+
+        <?php if (!$hasOfficial && !$thread): ?>
         <div class="tl-event">
             <span class="dot"></span>
             The team has not posted a public response here yet. Escalations are reviewed every day and the follow-up number is called directly.
         </div>
         <?php endif; ?>
+
+        <div class="tl-event">
+            <span class="dot"></span>
+            Replies here come only from the company's own billing panel and the ISP Ledger team. The wall itself does not accept replies, so there is no spam.
+        </div>
     </div>
 
     <div style="margin-top:28px;display:flex;gap:10px;flex-wrap:wrap;">

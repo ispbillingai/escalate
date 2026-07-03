@@ -46,11 +46,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         jout(['ok' => true, 'items' => [], 'managers' => accountManagers(), 'topics' => escalationTopics()]);
     }
     $db = getDB();
-    $stmt = $db->prepare("SELECT public_id, company_name, status, topic, issue, official_reply, replied_at, created_at
+    $stmt = $db->prepare("SELECT id, public_id, company_name, status, topic, issue, official_reply, replied_at, created_at
         FROM escalations WHERE subdomain = ? ORDER BY id DESC LIMIT 100");
     $stmt->execute([$sub]);
+    $rows = $stmt->fetchAll();
+    $threads = repliesForAll(array_column($rows, 'id'));
     $items = [];
-    foreach ($stmt->fetchAll() as $row) {
+    foreach ($rows as $row) {
+        $replies = [];
+        // The freshest staff activity: used by the panel's sidebar badge.
+        $signal = ((string)$row['official_reply'] !== '') ? (string)$row['replied_at'] : '';
+        foreach ($threads[(int)$row['id']] ?? [] as $r) {
+            $replies[] = [
+                'author'     => $r['author_type'],
+                'name'       => (string)$r['author_name'],
+                'body'       => (string)$r['body'],
+                'created_at' => (string)$r['created_at'],
+            ];
+            if ($r['author_type'] === 'staff' && (string)$r['created_at'] > $signal) {
+                $signal = (string)$r['created_at'];
+            }
+        }
         $items[] = [
             'id'             => $row['public_id'],
             'company'        => $row['company_name'],
@@ -61,6 +77,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             'official_reply' => (string)$row['official_reply'],
             'replied_at'     => (string)$row['replied_at'],
             'created_at'     => (string)$row['created_at'],
+            'replies'        => $replies,
+            'reply_signal'   => $signal,
             'url'            => escalationUrl($row['public_id']),
         ];
     }
@@ -69,6 +87,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     jout(['ok' => false, 'error' => 'POST required.'], 405);
+}
+
+if (($_POST['action'] ?? '') === 'reply') {
+    // A company responding on its own escalation from the billing panel.
+    // The public wall has no reply form: this endpoint and admin.php are the
+    // only ways a reply gets published.
+    $sub = normalizeSub($_POST['sub'] ?? '');
+    $pid = trim((string)($_POST['id'] ?? ''));
+    if ($sub === '' || $pid === '') {
+        jout(['ok' => false, 'error' => 'Missing escalation reference.'], 422);
+    }
+    $stmt = getDB()->prepare("SELECT * FROM escalations WHERE public_id = ? AND subdomain = ?");
+    $stmt->execute([$pid, $sub]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        jout(['ok' => false, 'error' => 'Escalation not found for this account.'], 404);
+    }
+    $author = trim((string)($_POST['author'] ?? ''));
+    list($ok, $res) = addReply($row, 'company', $author !== '' ? $author : $row['company_name'], (string)($_POST['body'] ?? ''), clientIp());
+    if (!$ok) {
+        jout(['ok' => false, 'error' => $res], 422);
+    }
+    jout(['ok' => true, 'reply' => $res]);
 }
 
 $issueFiles = normalizeFilesArray($_FILES['images'] ?? null);
