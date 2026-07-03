@@ -26,8 +26,17 @@ define('PANEL_API_KEY', 'change_this_key');
 // Password for the moderation area (admin.php)
 define('ADMIN_PASSWORD', 'change_this_password');
 
-// Account managers customers must pick from when escalating (comma separated)
+// Account managers, comma separated. Shown as typing suggestions on the form;
+// customers can also type a name that is not on the list.
 define('ACCOUNT_MANAGERS', 'Manager One,Manager Two,Manager Three');
+
+// The domain tenant panels live under. The company name a customer types is
+// their panel subdomain: it must resolve as <company>.<PANEL_DOMAIN> in DNS
+// (checked with a live lookup) before a public escalation is accepted.
+define('PANEL_DOMAIN', 'ispledger.com');
+
+// Escalation topics, comma separated. Used on the form and as wall filters.
+define('ESCALATION_TOPICS', 'Billing & Payments,Payments Not Reflecting,Router / Connectivity,Hotspot Login Page,Speed & Bandwidth,SMS / Notifications,Support Experience,Other');
 
 // Submission rules
 define('MIN_WORDS', 100);            // minimum words in the issue text

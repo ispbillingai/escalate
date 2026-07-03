@@ -25,19 +25,29 @@ function jout(array $data, $code = 200)
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (($_GET['action'] ?? '') === 'managers') {
-        jout(['ok' => true, 'managers' => accountManagers()]);
+        jout(['ok' => true, 'managers' => accountManagers(), 'topics' => escalationTopics()]);
+    }
+    if (($_GET['action'] ?? '') === 'checksub') {
+        // Live account check used by the public form: does the typed company
+        // name resolve as <sub>.<PANEL_DOMAIN> in DNS?
+        $sub = normalizeSub($_GET['sub'] ?? '');
+        jout([
+            'ok'    => true,
+            'sub'   => $sub,
+            'host'  => $sub !== '' ? $sub . '.' . panelDomain() : '',
+            'valid' => $sub !== '' && subdomainResolves($sub),
+        ]);
     }
     if (($_GET['action'] ?? '') !== 'list') {
         jout(['ok' => false, 'error' => 'Unknown action.'], 400);
     }
-    $sub = strtolower(trim((string)($_GET['sub'] ?? '')));
-    $sub = preg_replace('/[^a-z0-9\-\.]/', '', $sub);
+    $sub = normalizeSub($_GET['sub'] ?? '');
     if ($sub === '') {
-        jout(['ok' => true, 'items' => [], 'managers' => accountManagers()]);
+        jout(['ok' => true, 'items' => [], 'managers' => accountManagers(), 'topics' => escalationTopics()]);
     }
     $db = getDB();
-    $stmt = $db->prepare("SELECT public_id, company_name, status, issue, official_reply, replied_at, created_at
-        FROM escalations WHERE subdomain = ? ORDER BY id DESC LIMIT 50");
+    $stmt = $db->prepare("SELECT public_id, company_name, status, topic, issue, official_reply, replied_at, created_at
+        FROM escalations WHERE subdomain = ? ORDER BY id DESC LIMIT 100");
     $stmt->execute([$sub]);
     $items = [];
     foreach ($stmt->fetchAll() as $row) {
@@ -46,6 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             'company'        => $row['company_name'],
             'status'         => $row['status'],
             'status_label'   => statusMeta($row['status'])['label'],
+            'topic'          => (string)($row['topic'] ?? ''),
             'excerpt'        => excerptWords($row['issue'], 30),
             'official_reply' => (string)$row['official_reply'],
             'replied_at'     => (string)$row['replied_at'],
@@ -53,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             'url'            => escalationUrl($row['public_id']),
         ];
     }
-    jout(['ok' => true, 'items' => $items, 'managers' => accountManagers()]);
+    jout(['ok' => true, 'items' => $items, 'managers' => accountManagers(), 'topics' => escalationTopics()]);
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

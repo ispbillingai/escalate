@@ -77,6 +77,51 @@ function accountManagers()
     return array_values($names);
 }
 
+function escalationTopics()
+{
+    $raw = defined('ESCALATION_TOPICS') ? ESCALATION_TOPICS
+        : 'Billing & Payments,Payments Not Reflecting,Router / Connectivity,Hotspot Login Page,Speed & Bandwidth,SMS / Notifications,Support Experience,Other';
+    return array_values(array_filter(array_map('trim', explode(',', $raw))));
+}
+
+function panelDomain()
+{
+    return defined('PANEL_DOMAIN') ? PANEL_DOMAIN : 'ispledger.com';
+}
+
+/**
+ * Normalize what the customer typed into a bare panel subdomain: lowercase,
+ * strips protocol, a leading www., and the panel domain if they pasted the
+ * full address. Returns '' when nothing usable is left.
+ */
+function normalizeSub($raw)
+{
+    $s = strtolower(trim((string)$raw));
+    $s = preg_replace('#^https?://#', '', $s);
+    $s = rtrim(explode('/', $s)[0], '.');
+    $suffix = '.' . panelDomain();
+    if (substr($s, -strlen($suffix)) === $suffix) {
+        $s = substr($s, 0, -strlen($suffix));
+    }
+    if (strpos($s, 'www.') === 0) {
+        $s = substr($s, 4);
+    }
+    return preg_replace('/[^a-z0-9\-]/', '', $s);
+}
+
+/**
+ * Live DNS lookup (the dig check): does <sub>.<PANEL_DOMAIN> actually exist?
+ * Accepts A, AAAA or CNAME so proxied setups still pass.
+ */
+function subdomainResolves($sub)
+{
+    if ($sub === '') {
+        return false;
+    }
+    $host = $sub . '.' . panelDomain() . '.';
+    return checkdnsrr($host, 'A') || checkdnsrr($host, 'AAAA') || checkdnsrr($host, 'CNAME');
+}
+
 function statusMeta($status)
 {
     switch ($status) {
@@ -267,6 +312,7 @@ function postEscalationToTelegram(array $row)
             . "Company: " . $row['company_name']
             . ($row['subdomain'] !== '' ? " (" . $row['subdomain'] . ")" : '') . "\n"
             . "Account manager: " . ($row['account_manager'] !== '' ? $row['account_manager'] : 'not set') . "\n"
+            . "Topic: " . (($row['topic'] ?? '') !== '' ? $row['topic'] : 'Other') . "\n"
             . "Follow-up number: " . $row['follow_up_number'] . "\n"
             . "Raised: " . ($row['source'] === 'panel' ? 'from their billing panel' : 'on the public platform') . "\n"
             . "A screenshot of the reply support gave is attached.\n\n"
@@ -345,7 +391,7 @@ function postReplyToTelegram(array $row, $replyText)
 // Core: create an escalation (shared by the public form and the panel API)
 
 /**
- * @param array      $in          company_name, subdomain, follow_up_number, issue, account_manager
+ * @param array      $in          company_name, subdomain, follow_up_number, issue, account_manager, topic
  * @param array      $issueFiles  flat list of $_FILES-style arrays (the issue pictures)
  * @param array|null $supportFile single $_FILES-style array (support reply screenshot, required)
  * @param string     $source      'web' or 'panel'
@@ -356,20 +402,35 @@ function createEscalation(array $in, array $issueFiles, $supportFile, $source)
     $errors = [];
 
     $company = trim((string)($in['company_name'] ?? ''));
-    $sub = strtolower(trim((string)($in['subdomain'] ?? '')));
-    $sub = preg_replace('/[^a-z0-9\-\.]/', '', $sub);
+    $sub = normalizeSub($in['subdomain'] ?? '');
     $phone = preg_replace('/[^0-9+]/', '', (string)($in['follow_up_number'] ?? ''));
     $issue = trim((string)($in['issue'] ?? ''));
     $manager = trim((string)($in['account_manager'] ?? ''));
+    $topic = trim((string)($in['topic'] ?? ''));
 
-    if (mb_strlen($company) < 2 || mb_strlen($company) > 160) {
-        $errors[] = 'Please give your company name.';
+    if ($source === 'panel') {
+        // Panels are key-authenticated and send their own subdomain; some run
+        // on custom domains, so no DNS gate here.
+        if (mb_strlen($company) < 2 || mb_strlen($company) > 160) {
+            $errors[] = 'Please give your company name.';
+        }
+    } else {
+        // On the public form the company name IS the panel subdomain. It must
+        // resolve in DNS as <company>.<PANEL_DOMAIN> to prove the account exists.
+        $sub = $sub !== '' ? $sub : normalizeSub($company);
+        if ($sub === '' || strlen($sub) > 64) {
+            $errors[] = 'Give your company name exactly as it appears in your panel address (the part before .' . panelDomain() . ').';
+        } elseif (!subdomainResolves($sub)) {
+            $errors[] = 'We could not find ' . $sub . '.' . panelDomain() . '. Enter the company name exactly as it appears in your panel address so we can verify your account.';
+        }
+        $company = $sub;
     }
-    $managers = accountManagers();
-    if ($managers && !in_array($manager, $managers, true)) {
-        $errors[] = 'Choose your account manager from the list.';
-    } elseif (!$managers && $manager === '') {
-        $errors[] = 'Give the name of your account manager.';
+
+    if (!in_array($topic, escalationTopics(), true)) {
+        $topic = 'Other';
+    }
+    if (mb_strlen($manager) < 2 || mb_strlen($manager) > 120) {
+        $errors[] = 'Write the name of your account manager.';
     }
     if (strlen($phone) < 7 || strlen($phone) > 16) {
         $errors[] = 'Please give a valid follow-up phone number.';
@@ -422,11 +483,11 @@ function createEscalation(array $in, array $issueFiles, $supportFile, $source)
     $db = getDB();
     $stmt = $db->prepare("INSERT INTO escalations
         (public_id, company_name, subdomain, follow_up_number, issue, images_json,
-         support_screenshot, account_manager, source, submit_ip)
-        VALUES (?,?,?,?,?,?,?,?,?,?)");
+         support_screenshot, account_manager, topic, source, submit_ip)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)");
     $stmt->execute([
         $publicId, $company, $sub, $phone, $issue, json_encode($saved),
-        $supportPath, $manager, $source === 'panel' ? 'panel' : 'web', $ip,
+        $supportPath, $manager, $topic, $source === 'panel' ? 'panel' : 'web', $ip,
     ]);
 
     $row = $db->prepare("SELECT * FROM escalations WHERE public_id = ?");

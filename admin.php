@@ -81,9 +81,27 @@ $status = $_GET['status'] ?? '';
 if (!in_array($status, ['open', 'in_review', 'resolved'], true)) {
     $status = '';
 }
-$where = $status !== '' ? "WHERE status = " . $db->quote($status) : '';
-$rows = $db->query("SELECT * FROM escalations $where ORDER BY id DESC LIMIT 200")->fetchAll();
-$backQs = $status !== '' ? 'status=' . rawurlencode($status) : '';
+$aq = trim((string)($_GET['q'] ?? ''));
+$where = [];
+$args = [];
+if ($status !== '') {
+    $where[] = 'status = ?';
+    $args[] = $status;
+}
+if ($aq !== '') {
+    $where[] = '(company_name LIKE ? OR subdomain LIKE ? OR public_id = ? OR issue LIKE ? OR account_manager LIKE ? OR follow_up_number LIKE ?)';
+    $args[] = '%' . $aq . '%';
+    $args[] = '%' . $aq . '%';
+    $args[] = $aq;
+    $args[] = '%' . $aq . '%';
+    $args[] = '%' . $aq . '%';
+    $args[] = '%' . $aq . '%';
+}
+$whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
+$stmt = $db->prepare("SELECT * FROM escalations $whereSql ORDER BY id DESC LIMIT 200");
+$stmt->execute($args);
+$rows = $stmt->fetchAll();
+$backQs = http_build_query(array_filter(['status' => $status, 'q' => $aq]));
 
 pageHeader('Escalations moderation', '');
 ?>
@@ -91,12 +109,17 @@ pageHeader('Escalations moderation', '');
 <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:30px 0 18px;">
     <h1 style="font-size:24px;">Moderation (<?php echo count($rows); ?>)</h1>
     <div class="tabs">
-        <a class="tab <?php echo $status === '' ? 'active' : ''; ?>" href="admin.php">All</a>
-        <a class="tab <?php echo $status === 'open' ? 'active' : ''; ?>" href="admin.php?status=open">Open</a>
-        <a class="tab <?php echo $status === 'in_review' ? 'active' : ''; ?>" href="admin.php?status=in_review">In Review</a>
-        <a class="tab <?php echo $status === 'resolved' ? 'active' : ''; ?>" href="admin.php?status=resolved">Resolved</a>
+        <a class="tab <?php echo $status === '' ? 'active' : ''; ?>" href="admin.php<?php echo $aq !== '' ? '?q=' . rawurlencode($aq) : ''; ?>">All</a>
+        <a class="tab <?php echo $status === 'open' ? 'active' : ''; ?>" href="admin.php?status=open<?php echo $aq !== '' ? '&q=' . rawurlencode($aq) : ''; ?>">Open</a>
+        <a class="tab <?php echo $status === 'in_review' ? 'active' : ''; ?>" href="admin.php?status=in_review<?php echo $aq !== '' ? '&q=' . rawurlencode($aq) : ''; ?>">In Review</a>
+        <a class="tab <?php echo $status === 'resolved' ? 'active' : ''; ?>" href="admin.php?status=resolved<?php echo $aq !== '' ? '&q=' . rawurlencode($aq) : ''; ?>">Resolved</a>
         <a class="tab" href="admin.php?logout=1">Sign out</a>
     </div>
+    <form class="searchbox" method="get" action="admin.php">
+        <?php if ($status !== ''): ?><input type="hidden" name="status" value="<?php echo e($status); ?>"><?php endif; ?>
+        <input type="text" name="q" value="<?php echo e($aq); ?>" placeholder="Search company, phone, manager, text...">
+        <button class="btn small" type="submit">Search</button>
+    </form>
 </div>
 
 <div class="detail" style="margin-top:0;overflow-x:auto;">
@@ -110,6 +133,7 @@ pageHeader('Escalations moderation', '');
             <span style="color:var(--muted);font-size:12.5px;">
                 #<?php echo e($row['public_id']); ?> &middot; <?php echo e($row['created_at']); ?> &middot; <?php echo e($row['source']); ?>
                 <?php echo $row['subdomain'] !== '' ? '&middot; ' . e($row['subdomain']) : ''; ?>
+                <?php echo (string)($row['topic'] ?? '') !== '' ? '&middot; ' . e($row['topic']) : ''; ?>
                 <?php echo $row['telegram_message_id'] === '' ? '&middot; <span style="color:var(--amber)">not on Telegram</span>' : ''; ?>
             </span>
             <p style="margin-top:6px;color:#c6d1e8;"><?php echo e(excerptWords($row['issue'], 45)); ?></p>

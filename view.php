@@ -39,6 +39,7 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
                 Escalation #<?php echo e($row['public_id']); ?>
                 &middot; raised <?php echo e(timeAgo($row['created_at'])); ?>
                 &middot; <?php echo $row['source'] === 'panel' ? 'from their billing panel' : 'on the public platform'; ?>
+                <?php if ((string)($row['topic'] ?? '') !== ''): ?>&middot; <a class="readmore" href="index.php?topic=<?php echo e(rawurlencode($row['topic'])); ?>#wall"><?php echo e($row['topic']); ?></a><?php endif; ?>
                 <?php if ($row['account_manager'] !== ''): ?>&middot; account manager <?php echo e($row['account_manager']); ?><?php endif; ?>
                 &middot; follow-up <?php echo e(maskPhone($row['follow_up_number'])); ?>
             </div>

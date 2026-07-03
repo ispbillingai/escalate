@@ -4,8 +4,9 @@ Public escalation platform for escalate.ispledger.com. When a customer feels nor
 
 ## What an escalation contains
 
-- Company name (published)
-- Panel subdomain (optional, helps locate the account)
+- Company name (published). On the public form this IS the panel subdomain: the form checks live in DNS that `<company>.<PANEL_DOMAIN>` exists before accepting, so every escalation binds to a real account and shows up on that tenant's panel Escalate page. Panel submissions are key-authenticated and skip the DNS gate (custom domains exist).
+- Topic, chosen from `ESCALATION_TOPICS` (wall filter chips, shown on cards)
+- Account manager, written by the customer (configured names appear as typing suggestions)
 - The issue, minimum 100 words
 - 1 to 4 pictures of the issue (required)
 - A screenshot of the reply normal support gave, or a declaration that support never responded
@@ -84,6 +85,8 @@ company_name=Skyline WiFi Ltd
 subdomain=skyline
 follow_up_number=+254712345678
 issue=<at least 100 words>
+account_manager=Manager Name
+topic=Billing & Payments        (must be one of ESCALATION_TOPICS, else stored as Other)
 no_support_reply=0
 images[]=<file> (1 to 4)
 support_screenshot=<file> (required unless no_support_reply=1)
@@ -91,7 +94,9 @@ support_screenshot=<file> (required unless no_support_reply=1)
 
 Response: `{"ok":true,"id":"<public_id>","url":"https://escalate.ispledger.com/view.php?id=..."}` or `{"ok":false,"error":"...","errors":[...]}` with HTTP 422.
 
-List a tenant's escalations: `GET /api.php?action=list&sub=<subdomain>` returns `{"ok":true,"items":[...]}` including status and any official reply.
+List a tenant's escalations: `GET /api.php?action=list&sub=<subdomain>` returns `{"ok":true,"items":[...],"managers":[...],"topics":[...]}` including status, topic and any official reply.
+
+Check an account exists: `GET /api.php?action=checksub&sub=<name>` returns `{"ok":true,"sub":"skyline","host":"skyline.ispledger.com","valid":true}` (a live DNS lookup; the public form calls this as the customer types).
 
 ## Anti-abuse
 

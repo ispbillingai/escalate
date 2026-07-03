@@ -3,8 +3,10 @@
 require_once __DIR__ . '/lib.php';
 
 $errors = [];
-$old = ['company_name' => '', 'subdomain' => '', 'follow_up_number' => '', 'issue' => '', 'account_manager' => ''];
+$old = ['company_name' => '', 'subdomain' => '', 'follow_up_number' => '', 'issue' => '', 'account_manager' => '', 'topic' => ''];
 $managers = accountManagers();
+$topics = escalationTopics();
+$domain = panelDomain();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Honeypot: real users never fill this hidden field.
@@ -61,26 +63,30 @@ pageHeader('Raise an escalation', 'submit');
         <input type="text" name="website" value="" style="display:none" tabindex="-1" autocomplete="off">
 
         <div class="field">
-            <label for="company_name">Company name <small>(shown publicly)</small></label>
-            <input type="text" id="company_name" name="company_name" maxlength="160" required value="<?php echo e($old['company_name']); ?>" placeholder="e.g. Skyline WiFi Ltd">
+            <label for="subdomain">Company name <small>(the part before .<?php echo e($domain); ?> in your panel address)</small></label>
+            <input type="text" id="subdomain" name="subdomain" maxlength="64" required value="<?php echo e($old['subdomain'] !== '' ? $old['subdomain'] : $old['company_name']); ?>" placeholder="e.g. skyline" autocomplete="off" spellcheck="false">
+            <div class="subcheck" id="subCheck" style="margin-top:6px;font-size:13px;color:var(--muted);">
+                Your panel: <b id="subPreview">company.<?php echo e($domain); ?></b> <span id="subStatus"></span>
+            </div>
         </div>
 
         <div class="field">
-            <label for="subdomain">Your panel subdomain <small>(optional, helps us find your account faster)</small></label>
-            <input type="text" id="subdomain" name="subdomain" maxlength="64" value="<?php echo e($old['subdomain']); ?>" placeholder="e.g. skyline">
-        </div>
-
-        <div class="field">
-            <label for="account_manager">Your account manager <small>(required)</small></label>
-            <?php if ($managers): ?>
-            <select id="account_manager" name="account_manager" required>
-                <option value="">Choose your account manager...</option>
-                <?php foreach ($managers as $m): ?>
-                    <option value="<?php echo e($m); ?>" <?php echo $old['account_manager'] === $m ? 'selected' : ''; ?>><?php echo e($m); ?></option>
+            <label for="topic">Topic <small>(what is this escalation about?)</small></label>
+            <select id="topic" name="topic" required>
+                <option value="">Choose a topic...</option>
+                <?php foreach ($topics as $t): ?>
+                    <option value="<?php echo e($t); ?>" <?php echo $old['topic'] === $t ? 'selected' : ''; ?>><?php echo e($t); ?></option>
                 <?php endforeach; ?>
             </select>
-            <?php else: ?>
-            <input type="text" id="account_manager" name="account_manager" maxlength="120" required value="<?php echo e($old['account_manager']); ?>" placeholder="Name of your account manager">
+        </div>
+
+        <div class="field">
+            <label for="account_manager">Your account manager <small>(write their name)</small></label>
+            <input type="text" id="account_manager" name="account_manager" maxlength="120" required value="<?php echo e($old['account_manager']); ?>" placeholder="Name of your account manager" list="managerList" autocomplete="off">
+            <?php if ($managers): ?>
+            <datalist id="managerList">
+                <?php foreach ($managers as $m): ?><option value="<?php echo e($m); ?>"></option><?php endforeach; ?>
+            </datalist>
             <?php endif; ?>
         </div>
 
@@ -123,6 +129,43 @@ pageHeader('Raise an escalation', 'submit');
 (function () {
     var MIN_WORDS = <?php echo (int)MIN_WORDS; ?>;
     var MAX_IMAGES = <?php echo (int)MAX_IMAGES; ?>;
+    var DOMAIN = <?php echo json_encode($domain); ?>;
+
+    // Live account check: as they type the company name, show the panel
+    // address it maps to and verify it actually exists in DNS.
+    var subInput = document.getElementById('subdomain');
+    var subPreview = document.getElementById('subPreview');
+    var subStatus = document.getElementById('subStatus');
+    var subValid = null;
+    var subTimer = null;
+
+    function normalizeSub(v) {
+        v = v.toLowerCase().replace(/^https?:\/\//, '').split('/')[0];
+        if (v.slice(-(DOMAIN.length + 1)) === '.' + DOMAIN) { v = v.slice(0, -(DOMAIN.length + 1)); }
+        if (v.indexOf('www.') === 0) { v = v.slice(4); }
+        return v.replace(/[^a-z0-9\-]/g, '');
+    }
+    function checkSub() {
+        var sub = normalizeSub(subInput.value);
+        subPreview.textContent = (sub || 'company') + '.' + DOMAIN;
+        if (!sub) { subStatus.textContent = ''; subValid = null; return; }
+        subStatus.textContent = ' checking...';
+        subStatus.style.color = 'var(--muted)';
+        fetch('api.php?action=checksub&sub=' + encodeURIComponent(sub))
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (normalizeSub(subInput.value) !== (d.sub || '')) { return; }
+                subValid = !!d.valid;
+                subStatus.textContent = subValid ? ' account found' : ' account not found';
+                subStatus.style.color = subValid ? '#2fdc8b' : '#ff5d73';
+            })
+            .catch(function () { subValid = null; subStatus.textContent = ''; });
+    }
+    subInput.addEventListener('input', function () {
+        clearTimeout(subTimer);
+        subTimer = setTimeout(checkSub, 450);
+    });
+    if (subInput.value) { checkSub(); }
 
     var issue = document.getElementById('issue');
     var meter = document.getElementById('wordmeter');
@@ -169,11 +212,19 @@ pageHeader('Raise an escalation', 'submit');
 
     document.getElementById('escForm').addEventListener('submit', function (ev) {
         var problems = [];
+        if (!normalizeSub(subInput.value)) {
+            problems.push('Give your company name (your panel subdomain).');
+        } else if (subValid === false) {
+            problems.push('We could not find ' + normalizeSub(subInput.value) + '.' + DOMAIN + '. Type the company name exactly as it appears in your panel address.');
+        }
+        if (!document.getElementById('topic').value) {
+            problems.push('Choose a topic.');
+        }
         if (words(issue.value) < MIN_WORDS) {
             problems.push('Describe the issue in at least ' + MIN_WORDS + ' words.');
         }
-        if (!document.getElementById('account_manager').value) {
-            problems.push('Choose your account manager.');
+        if (!document.getElementById('account_manager').value.trim()) {
+            problems.push('Write the name of your account manager.');
         }
         if (!document.getElementById('images').files.length) {
             problems.push('Attach at least one picture of the issue.');

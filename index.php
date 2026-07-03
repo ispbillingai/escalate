@@ -8,6 +8,16 @@ $status = $_GET['status'] ?? '';
 if (!in_array($status, ['open', 'in_review', 'resolved'], true)) {
     $status = '';
 }
+$topics = escalationTopics();
+$topic = trim((string)($_GET['topic'] ?? ''));
+if (!in_array($topic, $topics, true)) {
+    $topic = '';
+}
+$sort = $_GET['sort'] ?? 'newest';
+if (!in_array($sort, ['newest', 'oldest', 'updated'], true)) {
+    $sort = 'newest';
+}
+$orderSql = ['newest' => 'id DESC', 'oldest' => 'id ASC', 'updated' => 'updated_at DESC'][$sort];
 $q = trim((string)($_GET['q'] ?? ''));
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 12;
@@ -18,11 +28,17 @@ if ($status !== '') {
     $where[] = 'status = ?';
     $args[] = $status;
 }
+if ($topic !== '') {
+    $where[] = 'topic = ?';
+    $args[] = $topic;
+}
 if ($q !== '') {
-    $where[] = '(company_name LIKE ? OR subdomain LIKE ? OR public_id = ?)';
+    $where[] = '(company_name LIKE ? OR subdomain LIKE ? OR public_id = ? OR issue LIKE ? OR account_manager LIKE ?)';
     $args[] = '%' . $q . '%';
     $args[] = '%' . $q . '%';
     $args[] = $q;
+    $args[] = '%' . $q . '%';
+    $args[] = '%' . $q . '%';
 }
 $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 
@@ -32,7 +48,7 @@ $total = (int)$stmt->fetchColumn();
 $pages = max(1, (int)ceil($total / $perPage));
 $page = min($page, $pages);
 
-$stmt = $db->prepare("SELECT * FROM escalations $whereSql ORDER BY id DESC LIMIT " . (($page - 1) * $perPage) . ", $perPage");
+$stmt = $db->prepare("SELECT * FROM escalations $whereSql ORDER BY $orderSql LIMIT " . (($page - 1) * $perPage) . ", $perPage");
 $stmt->execute($args);
 $rows = $stmt->fetchAll();
 
@@ -43,16 +59,21 @@ foreach ($db->query("SELECT status, COUNT(*) c FROM escalations GROUP BY status"
     }
     $counts['all'] += (int)$r['c'];
 }
+$topicCounts = [];
+foreach ($db->query("SELECT topic, COUNT(*) c FROM escalations WHERE topic <> '' GROUP BY topic") as $r) {
+    $topicCounts[$r['topic']] = (int)$r['c'];
+}
 
-$tabUrl = function ($st) use ($q) {
-    $params = [];
-    if ($st !== '') {
-        $params['status'] = $st;
-    }
-    if ($q !== '') {
-        $params['q'] = $q;
-    }
-    return 'index.php' . ($params ? ('?' . http_build_query($params)) : '');
+// One URL builder for every filter link: keeps the other filters sticky.
+$filterUrl = function (array $overrides = []) use ($status, $topic, $q, $sort) {
+    $params = array_merge(
+        ['status' => $status, 'topic' => $topic, 'q' => $q, 'sort' => $sort === 'newest' ? '' : $sort],
+        $overrides
+    );
+    $params = array_filter($params, function ($v) {
+        return $v !== '' && $v !== null;
+    });
+    return 'index.php' . ($params ? ('?' . http_build_query($params)) : '') . '#wall';
 };
 
 pageHeader('Escalate by ISP Ledger: public escalation wall', 'wall');
@@ -84,17 +105,49 @@ pageHeader('Escalate by ISP Ledger: public escalation wall', 'wall');
 
 <div id="wall" class="filterbar">
     <div class="tabs">
-        <a class="tab <?php echo $status === '' ? 'active' : ''; ?>" href="<?php echo e($tabUrl('')); ?>">All</a>
-        <a class="tab <?php echo $status === 'open' ? 'active' : ''; ?>" href="<?php echo e($tabUrl('open')); ?>">Open</a>
-        <a class="tab <?php echo $status === 'in_review' ? 'active' : ''; ?>" href="<?php echo e($tabUrl('in_review')); ?>">In Review</a>
-        <a class="tab <?php echo $status === 'resolved' ? 'active' : ''; ?>" href="<?php echo e($tabUrl('resolved')); ?>">Resolved</a>
+        <a class="tab <?php echo $status === '' ? 'active' : ''; ?>" href="<?php echo e($filterUrl(['status' => '', 'page' => ''])); ?>">All <small>(<?php echo $counts['all']; ?>)</small></a>
+        <a class="tab <?php echo $status === 'open' ? 'active' : ''; ?>" href="<?php echo e($filterUrl(['status' => 'open', 'page' => ''])); ?>">Open <small>(<?php echo $counts['open']; ?>)</small></a>
+        <a class="tab <?php echo $status === 'in_review' ? 'active' : ''; ?>" href="<?php echo e($filterUrl(['status' => 'in_review', 'page' => ''])); ?>">In Review <small>(<?php echo $counts['in_review']; ?>)</small></a>
+        <a class="tab <?php echo $status === 'resolved' ? 'active' : ''; ?>" href="<?php echo e($filterUrl(['status' => 'resolved', 'page' => ''])); ?>">Resolved <small>(<?php echo $counts['resolved']; ?>)</small></a>
     </div>
     <form class="searchbox" method="get" action="index.php">
         <?php if ($status !== ''): ?><input type="hidden" name="status" value="<?php echo e($status); ?>"><?php endif; ?>
-        <input type="text" name="q" value="<?php echo e($q); ?>" placeholder="Search company or reference...">
+        <?php if ($topic !== ''): ?><input type="hidden" name="topic" value="<?php echo e($topic); ?>"><?php endif; ?>
+        <?php if ($sort !== 'newest'): ?><input type="hidden" name="sort" value="<?php echo e($sort); ?>"><?php endif; ?>
+        <input type="text" name="q" value="<?php echo e($q); ?>" placeholder="Search company, topic text, manager or #reference...">
         <button class="btn small" type="submit">Search</button>
     </form>
 </div>
+
+<div class="filterbar" style="margin-top:10px;align-items:center;">
+    <div class="tabs" style="flex-wrap:wrap;">
+        <a class="tab <?php echo $topic === '' ? 'active' : ''; ?>" href="<?php echo e($filterUrl(['topic' => '', 'page' => ''])); ?>">All topics</a>
+        <?php foreach ($topics as $t): ?>
+        <a class="tab <?php echo $topic === $t ? 'active' : ''; ?>" href="<?php echo e($filterUrl(['topic' => $t, 'page' => ''])); ?>">
+            <?php echo e($t); ?><?php if (!empty($topicCounts[$t])): ?> <small>(<?php echo $topicCounts[$t]; ?>)</small><?php endif; ?>
+        </a>
+        <?php endforeach; ?>
+    </div>
+    <form class="searchbox" method="get" action="index.php" id="sortForm">
+        <?php if ($status !== ''): ?><input type="hidden" name="status" value="<?php echo e($status); ?>"><?php endif; ?>
+        <?php if ($topic !== ''): ?><input type="hidden" name="topic" value="<?php echo e($topic); ?>"><?php endif; ?>
+        <?php if ($q !== ''): ?><input type="hidden" name="q" value="<?php echo e($q); ?>"><?php endif; ?>
+        <select name="sort" onchange="document.getElementById('sortForm').submit();" aria-label="Sort escalations">
+            <option value="newest" <?php echo $sort === 'newest' ? 'selected' : ''; ?>>Newest first</option>
+            <option value="oldest" <?php echo $sort === 'oldest' ? 'selected' : ''; ?>>Oldest first</option>
+            <option value="updated" <?php echo $sort === 'updated' ? 'selected' : ''; ?>>Recently updated</option>
+        </select>
+    </form>
+</div>
+
+<?php if ($q !== '' || $topic !== '' || $status !== ''): ?>
+<p style="color:var(--muted);font-size:13.5px;margin:12px 2px;">
+    <?php echo $total; ?> escalation<?php echo $total === 1 ? '' : 's'; ?> found
+    <?php if ($q !== ''): ?> for "<b><?php echo e($q); ?></b>"<?php endif; ?>
+    <?php if ($topic !== ''): ?> in <b><?php echo e($topic); ?></b><?php endif; ?>
+    &middot; <a class="readmore" href="index.php#wall">Clear filters</a>
+</p>
+<?php endif; ?>
 
 <?php if (!$rows): ?>
     <div class="empty">
@@ -113,7 +166,12 @@ pageHeader('Escalate by ISP Ledger: public escalation wall', 'wall');
             <div class="card-head">
                 <div>
                     <div class="card-company"><?php echo e($row['company_name']); ?></div>
-                    <div class="card-meta">#<?php echo e($row['public_id']); ?> &middot; <?php echo e(timeAgo($row['created_at'])); ?></div>
+                    <div class="card-meta">
+                        #<?php echo e($row['public_id']); ?> &middot; <?php echo e(timeAgo($row['created_at'])); ?>
+                        <?php if ((string)($row['topic'] ?? '') !== ''): ?>
+                            &middot; <a class="readmore" href="<?php echo e($filterUrl(['topic' => $row['topic'], 'page' => ''])); ?>"><?php echo e($row['topic']); ?></a>
+                        <?php endif; ?>
+                    </div>
                 </div>
                 <span class="pill <?php echo $meta['class']; ?>"><?php echo $meta['label']; ?></span>
             </div>
@@ -138,16 +196,30 @@ pageHeader('Escalate by ISP Ledger: public escalation wall', 'wall');
 
     <?php if ($pages > 1): ?>
     <div class="pager">
-        <?php for ($p = 1; $p <= $pages; $p++):
-            $params = ['page' => $p];
-            if ($status !== '') { $params['status'] = $status; }
-            if ($q !== '') { $params['q'] = $q; }
-            $href = 'index.php?' . http_build_query($params);
-        ?>
-            <?php if ($p === $page): ?><span class="cur"><?php echo $p; ?></span>
-            <?php else: ?><a href="<?php echo e($href); ?>"><?php echo $p; ?></a><?php endif; ?>
-        <?php endfor; ?>
+        <?php
+        // Windowed pagination: Prev, first page, a window around the current
+        // page with ellipses, last page, Next. Stays tidy at any page count.
+        $window = [];
+        for ($p = 1; $p <= $pages; $p++) {
+            if ($p === 1 || $p === $pages || abs($p - $page) <= 2) {
+                $window[] = $p;
+            }
+        }
+        if ($page > 1): ?>
+            <a href="<?php echo e($filterUrl(['page' => $page - 1])); ?>">&laquo; Prev</a>
+        <?php endif;
+        $last = 0;
+        foreach ($window as $p):
+            if ($last && $p > $last + 1): ?><span class="gap">&hellip;</span><?php endif;
+            $last = $p;
+            if ($p === $page): ?><span class="cur"><?php echo $p; ?></span>
+            <?php else: ?><a href="<?php echo e($filterUrl(['page' => $p])); ?>"><?php echo $p; ?></a><?php endif;
+        endforeach;
+        if ($page < $pages): ?>
+            <a href="<?php echo e($filterUrl(['page' => $page + 1])); ?>">Next &raquo;</a>
+        <?php endif; ?>
     </div>
+    <p style="text-align:center;color:var(--muted);font-size:12.5px;">Page <?php echo $page; ?> of <?php echo $pages; ?> &middot; <?php echo $total; ?> escalations</p>
     <?php endif; ?>
 <?php endif; ?>
 
