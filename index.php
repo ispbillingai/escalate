@@ -63,7 +63,7 @@ pageHeader('Escalate by ISP Ledger: public escalation wall', 'wall');
     <h1>When support lets you down,<br>take it <span class="glow">to orbit</span>.</h1>
     <p class="sub">Every escalation raised here is published for everyone to see and posted straight to our Telegram channel. No queue, no silence: leadership sees it, the community sees it, and you get called back.</p>
     <div class="pledge">
-        <p><b>An honest word from us.</b> Serving thousands of ISPs means we will not get it right for every customer, every time, no matter how hard we try. What we can promise is that no complaint dies in a queue. This platform is our last line of accountability: when normal support has not given you the resolution you deserve, raise it here in the open, where it cannot be ignored, and we will do everything in our power to make it right.</p>
+        <p><b>A promise from us.</b> Every customer matters to us, and we work hard to give each one a great experience. Once in a while we may still miss the mark, and when that happens we would rather hear about it loudly than have you feel unheard. This platform is our promise that no concern ever dies in a queue: raise it here in the open and we will do everything in our power to make it right.</p>
     </div>
     <div class="hero-actions">
         <a class="btn" href="submit.php">Raise an Escalation</a>

@@ -37,7 +37,7 @@ pageHeader('Raise an escalation', 'submit');
     <h1>Raise an <span class="glow">escalation</span></h1>
     <p class="sub">Tried normal support and got nowhere? Put it on the record. Your escalation goes public here and lands in our Telegram channel the second you press launch.</p>
     <div class="pledge">
-        <p><b>An honest word from us.</b> We know that no matter how hard we try, we will sometimes fall short for a customer. This page exists for exactly those moments. Treat it as your last resort: we treat everything raised here with that same seriousness, and we will not stop until it is put right.</p>
+        <p><b>A promise from us.</b> We care deeply about getting things right for you, and if support has left you frustrated we genuinely want to know. This page exists for exactly those moments: everything raised here goes straight to the top, is treated with the seriousness of a last resort, and we will not rest until it is put right.</p>
     </div>
 </section>
 
