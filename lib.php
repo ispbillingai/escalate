@@ -329,13 +329,13 @@ function postEscalationToTelegram(array $row)
 {
     try {
         $text = "NEW ESCALATION #" . $row['public_id'] . "\n\n"
-            . "Company: " . $row['company_name']
-            . ($row['subdomain'] !== '' ? " (" . $row['subdomain'] . ")" : '') . "\n"
+            . "Company: " . $row['company_name'] . "\n"
+            . ($row['subdomain'] !== '' ? "Panel: " . $row['subdomain'] . "." . panelDomain() . "\n" : '')
             . "Account manager: " . ($row['account_manager'] !== '' ? $row['account_manager'] : 'not set') . "\n"
             . "Topic: " . (($row['topic'] ?? '') !== '' ? $row['topic'] : 'Other') . "\n"
             . "Follow-up number: " . $row['follow_up_number'] . "\n"
             . "Raised: " . ($row['source'] === 'panel' ? 'from their billing panel' : 'on the public platform') . "\n"
-            . "A screenshot of the reply support gave is attached.\n\n"
+            . "Pictures of the issue and the reply support gave follow below.\n\n"
             . mb_substr((string)$row['issue'], 0, 3300) . "\n\n"
             . escalationUrl($row['public_id']);
 
@@ -353,26 +353,28 @@ function postEscalationToTelegram(array $row)
         }
         $messageId = (string)$sent['result']['message_id'];
 
-        $paths = imagesOf($row);
-        if ($row['support_screenshot'] !== '') {
-            $paths[] = $row['support_screenshot'];
-        }
-        $paths = array_values(array_filter($paths, function ($p) {
-            return is_file(__DIR__ . '/' . $p);
-        }));
-        $paths = array_slice($paths, 0, 10);
+        // The topic is closed, so these posts are the whole record: every
+        // image goes out captioned with the escalation and company it belongs
+        // to, issue pictures and the support reply labelled separately.
+        $exists = function ($p) {
+            return $p !== '' && is_file(__DIR__ . '/' . $p);
+        };
+        $issuePaths = array_slice(array_values(array_filter(imagesOf($row), $exists)), 0, 9);
+        $tag = 'Escalation #' . $row['public_id'] . ' · ' . $row['company_name']
+            . ($row['account_manager'] !== '' ? ' · manager: ' . $row['account_manager'] : '');
 
-        if (count($paths) === 1) {
+        if (count($issuePaths) === 1) {
             $photoParams = [
                 'chat_id'             => TELEGRAM_CHAT_ID,
-                'photo'               => new CURLFile(__DIR__ . '/' . $paths[0]),
+                'photo'               => new CURLFile(__DIR__ . '/' . $issuePaths[0]),
+                'caption'             => $tag . ' · picture of the issue',
                 'reply_to_message_id' => $messageId,
             ];
             if (telegramTopicId() > 0) {
                 $photoParams['message_thread_id'] = telegramTopicId();
             }
             tgApi('sendPhoto', $photoParams);
-        } elseif (count($paths) > 1) {
+        } elseif (count($issuePaths) > 1) {
             $media = [];
             $params = [
                 'chat_id'             => TELEGRAM_CHAT_ID,
@@ -381,12 +383,29 @@ function postEscalationToTelegram(array $row)
             if (telegramTopicId() > 0) {
                 $params['message_thread_id'] = telegramTopicId();
             }
-            foreach ($paths as $i => $p) {
-                $media[] = ['type' => 'photo', 'media' => 'attach://photo' . $i];
+            foreach ($issuePaths as $i => $p) {
+                $item = ['type' => 'photo', 'media' => 'attach://photo' . $i];
+                if ($i === 0) {
+                    $item['caption'] = $tag . ' · pictures of the issue';
+                }
+                $media[] = $item;
                 $params['photo' . $i] = new CURLFile(__DIR__ . '/' . $p);
             }
             $params['media'] = json_encode($media);
             tgApi('sendMediaGroup', $params);
+        }
+
+        if ($exists((string)$row['support_screenshot'])) {
+            $photoParams = [
+                'chat_id'             => TELEGRAM_CHAT_ID,
+                'photo'               => new CURLFile(__DIR__ . '/' . $row['support_screenshot']),
+                'caption'             => $tag . ' · the reply support gave them',
+                'reply_to_message_id' => $messageId,
+            ];
+            if (telegramTopicId() > 0) {
+                $photoParams['message_thread_id'] = telegramTopicId();
+            }
+            tgApi('sendPhoto', $photoParams);
         }
         return $messageId;
     } catch (Throwable $ex) {
@@ -401,6 +420,7 @@ function postReplyToTelegram(array $row, $replyText)
     try {
         $text = "UPDATE ON ESCALATION #" . $row['public_id'] . "\n"
             . "Company: " . $row['company_name'] . "\n"
+            . ($row['account_manager'] !== '' ? "Account manager: " . $row['account_manager'] . "\n" : '')
             . "Status: " . statusMeta($row['status'])['label'] . "\n\n"
             . mb_substr((string)$replyText, 0, 3500) . "\n\n"
             . escalationUrl($row['public_id']);
