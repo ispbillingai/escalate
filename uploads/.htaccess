@@ -1,0 +1,8 @@
+# Never execute anything in uploads, images only.
+<IfModule mod_php.c>
+php_flag engine off
+</IfModule>
+<FilesMatch "\.(php|phar|phtml|php\d)$">
+Require all denied
+</FilesMatch>
+Options -Indexes
