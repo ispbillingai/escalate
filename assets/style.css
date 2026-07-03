@@ -115,6 +115,18 @@ body {
 .hero h1 .glow { color: var(--accent); }
 .hero p.sub { color: var(--muted); max-width: 640px; margin: 16px auto 26px; font-size: 17.5px; }
 .hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.pledge {
+    max-width: 700px;
+    margin: 0 auto 26px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--amber);
+    border-radius: 12px;
+    padding: 16px 20px;
+    text-align: left;
+}
+.pledge p { color: var(--muted); font-size: 14.8px; }
+.pledge b { color: var(--text); }
 
 /* Buttons */
 .btn {

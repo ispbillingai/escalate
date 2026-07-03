@@ -35,6 +35,9 @@ pageHeader('Raise an escalation', 'submit');
     <span class="orbit-tag">Mission control is listening</span>
     <h1>Raise an <span class="glow">escalation</span></h1>
     <p class="sub">Tried normal support and got nowhere? Put it on the record. Your escalation goes public here and lands in our Telegram channel the second you press launch.</p>
+    <div class="pledge">
+        <p><b>An honest word from us.</b> We know that no matter how hard we try, we will sometimes fall short for a customer. This page exists for exactly those moments. Treat it as your last resort: we treat everything raised here with that same seriousness, and we will not stop until it is put right.</p>
+    </div>
 </section>
 
 <div class="steps">
