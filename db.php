@@ -31,6 +31,7 @@ function getDB()
         issue TEXT NOT NULL,
         images_json TEXT NOT NULL,
         support_screenshot VARCHAR(255) NOT NULL DEFAULT '',
+        account_manager VARCHAR(120) NOT NULL DEFAULT '',
         no_support_reply TINYINT(1) NOT NULL DEFAULT 0,
         source VARCHAR(10) NOT NULL DEFAULT 'web',
         submit_ip VARCHAR(45) NOT NULL DEFAULT '',
@@ -46,6 +47,17 @@ function getDB()
         KEY idx_created (created_at),
         KEY idx_ip_created (submit_ip, created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    // Columns added after first release; heal older installs in place.
+    try {
+        $col = $pdo->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'escalations' AND COLUMN_NAME = 'account_manager'")->fetchColumn();
+        if ((int)$col === 0) {
+            $pdo->exec("ALTER TABLE escalations ADD COLUMN account_manager VARCHAR(120) NOT NULL DEFAULT '' AFTER support_screenshot");
+        }
+    } catch (Throwable $e) {
+        error_log('[escalate] column heal failed: ' . $e->getMessage());
+    }
 
     return $pdo;
 }

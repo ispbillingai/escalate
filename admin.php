@@ -117,6 +117,9 @@ pageHeader('Escalations moderation', '');
         </td>
         <td style="white-space:nowrap;">
             <?php echo e($row['follow_up_number']); ?><br>
+            <?php if ($row['account_manager'] !== ''): ?>
+                <span style="color:var(--muted);font-size:12.5px;">Manager: <?php echo e($row['account_manager']); ?></span><br>
+            <?php endif; ?>
             <span style="color:var(--muted);font-size:12.5px;">IP <?php echo e($row['submit_ip']); ?></span>
         </td>
         <td style="min-width:290px;">

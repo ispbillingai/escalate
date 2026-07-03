@@ -23,6 +23,9 @@ define('PANEL_API_KEY', 'change_this_key');
 // Password for the moderation area (admin.php)
 define('ADMIN_PASSWORD', 'change_this_password');
 
+// Account managers customers must pick from when escalating (comma separated)
+define('ACCOUNT_MANAGERS', 'Manager One,Manager Two,Manager Three');
+
 // Submission rules
 define('MIN_WORDS', 100);            // minimum words in the issue text
 define('MAX_IMAGES', 4);             // issue pictures per escalation

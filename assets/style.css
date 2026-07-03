@@ -290,7 +290,7 @@ body {
 .field { margin-bottom: 20px; }
 .field label { display: block; font-weight: 600; margin-bottom: 7px; font-size: 15px; }
 .field label small { color: var(--muted); font-weight: 400; }
-.field input[type=text], .field input[type=tel], .field textarea {
+.field input[type=text], .field input[type=tel], .field select, .field textarea {
     width: 100%;
     background: var(--panel-2);
     border: 1px solid var(--border);
@@ -300,7 +300,8 @@ body {
     font-size: 15.5px;
     font-family: inherit;
 }
-.field input:focus, .field textarea:focus { outline: none; border-color: var(--accent); }
+.field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--accent); }
+.field select option { background: var(--panel-2); color: var(--text); }
 .field textarea { min-height: 190px; resize: vertical; }
 .wordmeter { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 13.5px; color: var(--muted); }
 .wordmeter .bar { flex: 1; height: 6px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); overflow: hidden; }

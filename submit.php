@@ -3,7 +3,8 @@
 require_once __DIR__ . '/lib.php';
 
 $errors = [];
-$old = ['company_name' => '', 'subdomain' => '', 'follow_up_number' => '', 'issue' => '', 'no_support_reply' => false];
+$old = ['company_name' => '', 'subdomain' => '', 'follow_up_number' => '', 'issue' => '', 'account_manager' => ''];
+$managers = accountManagers();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Honeypot: real users never fill this hidden field.
@@ -13,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     foreach (array_keys($old) as $k) {
-        $old[$k] = $k === 'no_support_reply' ? !empty($_POST[$k]) : trim((string)($_POST[$k] ?? ''));
+        $old[$k] = trim((string)($_POST[$k] ?? ''));
     }
 
     $issueFiles = normalizeFilesArray($_FILES['images'] ?? null);
@@ -70,6 +71,20 @@ pageHeader('Raise an escalation', 'submit');
         </div>
 
         <div class="field">
+            <label for="account_manager">Your account manager <small>(required)</small></label>
+            <?php if ($managers): ?>
+            <select id="account_manager" name="account_manager" required>
+                <option value="">Choose your account manager...</option>
+                <?php foreach ($managers as $m): ?>
+                    <option value="<?php echo e($m); ?>" <?php echo $old['account_manager'] === $m ? 'selected' : ''; ?>><?php echo e($m); ?></option>
+                <?php endforeach; ?>
+            </select>
+            <?php else: ?>
+            <input type="text" id="account_manager" name="account_manager" maxlength="120" required value="<?php echo e($old['account_manager']); ?>" placeholder="Name of your account manager">
+            <?php endif; ?>
+        </div>
+
+        <div class="field">
             <label for="follow_up_number">Follow-up phone number <small>(never shown in full publicly)</small></label>
             <input type="tel" id="follow_up_number" name="follow_up_number" maxlength="16" required value="<?php echo e($old['follow_up_number']); ?>" placeholder="e.g. +254712345678">
         </div>
@@ -91,14 +106,10 @@ pageHeader('Raise an escalation', 'submit');
         </div>
 
         <div class="field">
-            <label>Screenshot of the reply support gave you</label>
+            <label>Screenshot of the reply support gave you <small>(required)</small></label>
             <label class="filedrop" for="support_screenshot" id="supportDrop">Click to choose the screenshot of support's response</label>
-            <input type="file" id="support_screenshot" name="support_screenshot" accept="image/*">
+            <input type="file" id="support_screenshot" name="support_screenshot" accept="image/*" required>
             <div class="previews" id="supportPreview"></div>
-            <div class="checkline" style="margin-top:10px;">
-                <input type="checkbox" id="no_support_reply" name="no_support_reply" value="1" <?php echo $old['no_support_reply'] ? 'checked' : ''; ?>>
-                <label for="no_support_reply" style="font-weight:400;margin:0;">Support never responded to me, I have nothing to screenshot.</label>
-            </div>
         </div>
 
         <button class="btn" type="submit" id="launchBtn" style="width:100%;font-size:17px;padding:14px;">Launch escalation</button>
@@ -154,29 +165,21 @@ pageHeader('Raise an escalation', 'submit');
     bindPreview(document.getElementById('images'), document.getElementById('imagePreviews'), false);
     bindPreview(document.getElementById('support_screenshot'), document.getElementById('supportPreview'), true);
 
-    var noReply = document.getElementById('no_support_reply');
     var supportInput = document.getElementById('support_screenshot');
-    var supportDrop = document.getElementById('supportDrop');
-    function toggleSupport() {
-        supportDrop.style.display = noReply.checked ? 'none' : '';
-        if (noReply.checked) {
-            supportInput.value = '';
-            document.getElementById('supportPreview').innerHTML = '';
-        }
-    }
-    noReply.addEventListener('change', toggleSupport);
-    toggleSupport();
 
     document.getElementById('escForm').addEventListener('submit', function (ev) {
         var problems = [];
         if (words(issue.value) < MIN_WORDS) {
             problems.push('Describe the issue in at least ' + MIN_WORDS + ' words.');
         }
+        if (!document.getElementById('account_manager').value) {
+            problems.push('Choose your account manager.');
+        }
         if (!document.getElementById('images').files.length) {
             problems.push('Attach at least one picture of the issue.');
         }
-        if (!noReply.checked && !supportInput.files.length) {
-            problems.push("Attach the screenshot of support's reply, or tick that support never responded.");
+        if (!supportInput.files.length) {
+            problems.push("Attach the screenshot of support's reply.");
         }
         if (problems.length) {
             ev.preventDefault();

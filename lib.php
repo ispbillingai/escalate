@@ -68,6 +68,15 @@ function timeAgo($datetime)
     return date('M j, Y', $ts);
 }
 
+function accountManagers()
+{
+    if (!defined('ACCOUNT_MANAGERS')) {
+        return [];
+    }
+    $names = array_filter(array_map('trim', explode(',', ACCOUNT_MANAGERS)));
+    return array_values($names);
+}
+
 function statusMeta($status)
 {
     switch ($status) {
@@ -198,15 +207,13 @@ function tgApi($method, array $params)
 function postEscalationToTelegram(array $row)
 {
     try {
-        $statusLine = $row['no_support_reply']
-            ? 'Support never responded to this customer.'
-            : 'A screenshot of the reply support gave is attached.';
         $text = "NEW ESCALATION #" . $row['public_id'] . "\n\n"
             . "Company: " . $row['company_name']
             . ($row['subdomain'] !== '' ? " (" . $row['subdomain'] . ")" : '') . "\n"
+            . "Account manager: " . ($row['account_manager'] !== '' ? $row['account_manager'] : 'not set') . "\n"
             . "Follow-up number: " . $row['follow_up_number'] . "\n"
             . "Raised: " . ($row['source'] === 'panel' ? 'from their billing panel' : 'on the public platform') . "\n"
-            . $statusLine . "\n\n"
+            . "A screenshot of the reply support gave is attached.\n\n"
             . mb_substr((string)$row['issue'], 0, 3300) . "\n\n"
             . escalationUrl($row['public_id']);
 
@@ -282,9 +289,9 @@ function postReplyToTelegram(array $row, $replyText)
 // Core: create an escalation (shared by the public form and the panel API)
 
 /**
- * @param array      $in          company_name, subdomain, follow_up_number, issue, no_support_reply
+ * @param array      $in          company_name, subdomain, follow_up_number, issue, account_manager
  * @param array      $issueFiles  flat list of $_FILES-style arrays (the issue pictures)
- * @param array|null $supportFile single $_FILES-style array or null (support reply screenshot)
+ * @param array|null $supportFile single $_FILES-style array (support reply screenshot, required)
  * @param string     $source      'web' or 'panel'
  * @return array [ok(bool), payload(row|['errors'=>[]])]
  */
@@ -297,10 +304,16 @@ function createEscalation(array $in, array $issueFiles, $supportFile, $source)
     $sub = preg_replace('/[^a-z0-9\-\.]/', '', $sub);
     $phone = preg_replace('/[^0-9+]/', '', (string)($in['follow_up_number'] ?? ''));
     $issue = trim((string)($in['issue'] ?? ''));
-    $noReply = !empty($in['no_support_reply']);
+    $manager = trim((string)($in['account_manager'] ?? ''));
 
     if (mb_strlen($company) < 2 || mb_strlen($company) > 160) {
         $errors[] = 'Please give your company name.';
+    }
+    $managers = accountManagers();
+    if ($managers && !in_array($manager, $managers, true)) {
+        $errors[] = 'Choose your account manager from the list.';
+    } elseif (!$managers && $manager === '') {
+        $errors[] = 'Give the name of your account manager.';
     }
     if (strlen($phone) < 7 || strlen($phone) > 16) {
         $errors[] = 'Please give a valid follow-up phone number.';
@@ -315,8 +328,8 @@ function createEscalation(array $in, array $issueFiles, $supportFile, $source)
     if (count($issueFiles) > MAX_IMAGES) {
         $errors[] = 'A maximum of ' . MAX_IMAGES . ' issue pictures is allowed.';
     }
-    if (!$noReply && ($supportFile === null || (int)($supportFile['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE)) {
-        $errors[] = 'Attach a screenshot of the reply you got from support, or tick "Support never responded".';
+    if ($supportFile === null || (int)($supportFile['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        $errors[] = 'Attach a screenshot of the reply you got from support.';
     }
 
     $ip = clientIp();
@@ -341,9 +354,7 @@ function createEscalation(array $in, array $issueFiles, $supportFile, $source)
         foreach ($issueFiles as $i => $f) {
             $saved[] = saveImage($f, 'Issue picture ' . ($i + 1));
         }
-        if (!$noReply && $supportFile !== null) {
-            $supportPath = saveImage($supportFile, 'Support reply screenshot');
-        }
+        $supportPath = saveImage($supportFile, 'Support reply screenshot');
     } catch (Exception $ex) {
         foreach ($saved as $p) {
             @unlink(__DIR__ . '/' . $p);
@@ -355,11 +366,11 @@ function createEscalation(array $in, array $issueFiles, $supportFile, $source)
     $db = getDB();
     $stmt = $db->prepare("INSERT INTO escalations
         (public_id, company_name, subdomain, follow_up_number, issue, images_json,
-         support_screenshot, no_support_reply, source, submit_ip)
+         support_screenshot, account_manager, source, submit_ip)
         VALUES (?,?,?,?,?,?,?,?,?,?)");
     $stmt->execute([
         $publicId, $company, $sub, $phone, $issue, json_encode($saved),
-        $supportPath, $noReply ? 1 : 0, $source === 'panel' ? 'panel' : 'web', $ip,
+        $supportPath, $manager, $source === 'panel' ? 'panel' : 'web', $ip,
     ]);
 
     $row = $db->prepare("SELECT * FROM escalations WHERE public_id = ?");

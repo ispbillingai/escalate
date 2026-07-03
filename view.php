@@ -39,6 +39,7 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
                 Escalation #<?php echo e($row['public_id']); ?>
                 &middot; raised <?php echo e(timeAgo($row['created_at'])); ?>
                 &middot; <?php echo $row['source'] === 'panel' ? 'from their billing panel' : 'on the public platform'; ?>
+                <?php if ($row['account_manager'] !== ''): ?>&middot; account manager <?php echo e($row['account_manager']); ?><?php endif; ?>
                 &middot; follow-up <?php echo e(maskPhone($row['follow_up_number'])); ?>
             </div>
         </div>
@@ -64,8 +65,6 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
                 <img src="<?php echo e($row['support_screenshot']); ?>" alt="Reply received from support" loading="lazy">
             </a>
         </div>
-    <?php elseif ($row['no_support_reply']): ?>
-        <div class="notice warn">This customer reports that normal support never responded to them.</div>
     <?php else: ?>
         <div class="notice">No support reply screenshot was attached.</div>
     <?php endif; ?>

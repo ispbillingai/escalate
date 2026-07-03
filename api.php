@@ -2,10 +2,12 @@
 // JSON API for the billing panels.
 //
 // POST (multipart/form-data)  -> create an escalation on behalf of a tenant.
-//   fields: key, company_name, subdomain, follow_up_number, issue, no_support_reply(0/1)
-//   files:  images[] (1..MAX_IMAGES), support_screenshot (unless no_support_reply=1)
+//   fields: key, company_name, subdomain, follow_up_number, issue, account_manager
+//   files:  images[] (1..MAX_IMAGES), support_screenshot (required)
 //
-// GET ?action=list&sub=<subdomain>  -> that tenant's escalations (public data only).
+// GET ?action=list&sub=<subdomain>  -> that tenant's escalations (public data only)
+//                                      plus the account manager list.
+// GET ?action=managers              -> just the account manager list.
 //
 // This endpoint always answers with JSON and never redirects.
 
@@ -22,13 +24,16 @@ function jout(array $data, $code = 200)
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    if (($_GET['action'] ?? '') === 'managers') {
+        jout(['ok' => true, 'managers' => accountManagers()]);
+    }
     if (($_GET['action'] ?? '') !== 'list') {
         jout(['ok' => false, 'error' => 'Unknown action.'], 400);
     }
     $sub = strtolower(trim((string)($_GET['sub'] ?? '')));
     $sub = preg_replace('/[^a-z0-9\-\.]/', '', $sub);
     if ($sub === '') {
-        jout(['ok' => true, 'items' => []]);
+        jout(['ok' => true, 'items' => [], 'managers' => accountManagers()]);
     }
     $db = getDB();
     $stmt = $db->prepare("SELECT public_id, company_name, status, issue, official_reply, replied_at, created_at
@@ -48,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             'url'            => escalationUrl($row['public_id']),
         ];
     }
-    jout(['ok' => true, 'items' => $items]);
+    jout(['ok' => true, 'items' => $items, 'managers' => accountManagers()]);
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
