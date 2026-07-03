@@ -531,7 +531,7 @@ function pageHeader($title, $active = '')
         . '<meta name="viewport" content="width=device-width, initial-scale=1">'
         . '<title>' . e($title) . '</title>'
         . '<link rel="icon" href="data:image/svg+xml,' . rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="80" font-size="80">&#128752;</text></svg>') . '">'
-        . '<link rel="stylesheet" href="assets/style.css">'
+        . '<link rel="stylesheet" href="assets/style.css?v=' . (int)@filemtime(__DIR__ . '/assets/style.css') . '">'
         . '<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>'
         . '<script>window.notify=function(t,m,i){if(window.Swal){Swal.fire({title:t,text:m,icon:i||"info",confirmButtonColor:"#3f6fe8",background:"#101728",color:"#e8ecf7"});}else{alert(t+"\n"+m);}};</script>'
         . '</head><body><div class="stars" aria-hidden="true"></div>'
