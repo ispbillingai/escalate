@@ -544,6 +544,39 @@ function postReplyToTelegram(array $row, $replyText)
     }
 }
 
+/**
+ * WhatsApp alert to staff when a new escalation lands. Best effort, never
+ * blocks or fails the submission. Configured via WHATSAPP_ALERT_* constants.
+ */
+function notifyEscalationByWhatsApp(array $row)
+{
+    if (!defined('WHATSAPP_ALERT_URL') || WHATSAPP_ALERT_URL === ''
+        || !defined('WHATSAPP_ALERT_TO') || WHATSAPP_ALERT_TO === '') {
+        return;
+    }
+    try {
+        $msg = 'New escalation #' . $row['public_id']
+            . ' from ' . $row['company_name']
+            . ((string)($row['topic'] ?? '') !== '' ? ' (' . $row['topic'] . ')' : '')
+            . ($row['account_manager'] !== '' ? ', manager ' . $row['account_manager'] : '')
+            . '. ' . escalationUrl($row['public_id']);
+        $url = WHATSAPP_ALERT_URL
+            . '?to=' . rawurlencode(WHATSAPP_ALERT_TO)
+            . '&msg=' . rawurlencode($msg)
+            . ((defined('WHATSAPP_ALERT_SECRET') && WHATSAPP_ALERT_SECRET !== '') ? '&secret=' . rawurlencode(WHATSAPP_ALERT_SECRET) : '');
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 8,
+            CURLOPT_CONNECTTIMEOUT => 4,
+        ]);
+        curl_exec($ch);
+        curl_close($ch);
+    } catch (Throwable $e) {
+        error_log('[escalate] whatsapp alert failed: ' . $e->getMessage());
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Core: create an escalation (shared by the public form and the panel API)
 
@@ -658,6 +691,8 @@ function createEscalation(array $in, array $issueFiles, $supportFile, $source)
         $upd->execute([$messageId, $row['id']]);
         $row['telegram_message_id'] = $messageId;
     }
+
+    notifyEscalationByWhatsApp($row);
 
     return [true, $row];
 }
