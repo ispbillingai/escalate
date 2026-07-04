@@ -112,14 +112,20 @@ pageHeader('Raise an escalation', 'submit');
 
         <div class="field">
             <label>Pictures of the issue <small>(1 to <?php echo MAX_IMAGES; ?> images, up to <?php echo round(MAX_IMAGE_BYTES / 1048576); ?> MB each)</small></label>
-            <label class="filedrop" for="images">Click to choose images showing the problem</label>
+            <label class="filedrop" for="images" id="imagesDrop">Click to choose images showing the problem
+                <small class="fd-hint">or drag &amp; drop or paste a screenshot here (Ctrl+V)</small>
+                <span class="fd-tag">Ctrl+V pastes here</span>
+            </label>
             <input type="file" id="images" name="images[]" accept="image/*" multiple>
             <div class="previews" id="imagePreviews"></div>
         </div>
 
         <div class="field">
             <label>Screenshot of the reply support gave you <small>(required)</small></label>
-            <label class="filedrop" for="support_screenshot" id="supportDrop">Click to choose the screenshot of support's response</label>
+            <label class="filedrop" for="support_screenshot" id="supportDrop">Click to choose the screenshot of support's response
+                <small class="fd-hint">or drag &amp; drop or paste it here (Ctrl+V)</small>
+                <span class="fd-tag">Ctrl+V pastes here</span>
+            </label>
             <input type="file" id="support_screenshot" name="support_screenshot" accept="image/*" required>
             <div class="previews" id="supportPreview"></div>
         </div>
@@ -194,9 +200,10 @@ pageHeader('Raise an escalation', 'submit');
     // Image picker with removable previews: picking more files adds to the
     // selection, and every thumbnail gets an X to drop a wrong choice. The
     // real input.files is kept in sync through a DataTransfer.
+    var canDT = true;
+    try { new DataTransfer(); } catch (e) { canDT = false; }
+
     function makePicker(input, holder, single) {
-        var canDT = true;
-        try { new DataTransfer(); } catch (e) { canDT = false; }
         var files = [];
 
         function sync() {
@@ -230,10 +237,11 @@ pageHeader('Raise an escalation', 'submit');
                 holder.appendChild(wrap);
             });
         }
-        input.addEventListener('change', function () {
-            var chosen = Array.prototype.slice.call(input.files || []).filter(function (f) {
+        function addFiles(list) {
+            var chosen = Array.prototype.slice.call(list || []).filter(function (f) {
                 return f.type && f.type.indexOf('image/') === 0;
             });
+            if (!chosen.length) { return; }
             if (single) {
                 files = chosen.slice(0, 1);
             } else if (canDT) {
@@ -253,10 +261,91 @@ pageHeader('Raise an escalation', 'submit');
                 files = chosen;
             }
             sync();
+        }
+        input.addEventListener('change', function () { addFiles(input.files); });
+        return { addFiles: addFiles };
+    }
+    var issuePicker = makePicker(document.getElementById('images'), document.getElementById('imagePreviews'), false);
+    var supportPicker = makePicker(document.getElementById('support_screenshot'), document.getElementById('supportPreview'), true);
+
+    // Paste (Ctrl+V) and drag & drop: a pasted screenshot lands in the
+    // highlighted zone; clicking a zone or its field makes it the target.
+    // Dropping is unambiguous — it goes to the zone dropped on. Needs
+    // DataTransfer so the files end up inside the real input for the POST.
+    if (canDT) {
+        var zones = [
+            { drop: document.getElementById('imagesDrop'), picker: issuePicker },
+            { drop: document.getElementById('supportDrop'), picker: supportPicker }
+        ];
+        var target = zones[0];
+
+        function setTarget(z) {
+            target = z;
+            zones.forEach(function (o) { o.drop.classList.toggle('target', o === z); });
+        }
+        setTarget(target);
+
+        function flash(el) {
+            el.classList.remove('flash');
+            void el.offsetWidth;
+            el.classList.add('flash');
+        }
+
+        // Screenshots paste in as "image.png" every time; give each a unique
+        // name so the name+size dedup never silently drops the second one.
+        var pasteN = 0;
+        function named(f) {
+            pasteN++;
+            var ext = (f.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+            try { return new File([f], 'pasted-' + Date.now() + '-' + pasteN + '.' + ext, { type: f.type }); }
+            catch (e) { return f; }
+        }
+        function imageFiles(dt) {
+            var out = [];
+            var items = (dt && dt.items) ? dt.items : [];
+            for (var i = 0; i < items.length; i++) {
+                if (items[i].kind === 'file') {
+                    var f = items[i].getAsFile();
+                    if (f && f.type.indexOf('image/') === 0) { out.push(f); }
+                }
+            }
+            if (!out.length && dt && dt.files) {
+                out = Array.prototype.slice.call(dt.files).filter(function (f) {
+                    return f.type && f.type.indexOf('image/') === 0;
+                });
+            }
+            return out;
+        }
+
+        zones.forEach(function (z) {
+            var field = z.drop.closest ? z.drop.closest('.field') : null;
+            (field || z.drop).addEventListener('click', function () { setTarget(z); });
+            z.drop.addEventListener('dragover', function (ev) {
+                ev.preventDefault();
+                z.drop.classList.add('dragover');
+            });
+            z.drop.addEventListener('dragleave', function () { z.drop.classList.remove('dragover'); });
+            z.drop.addEventListener('drop', function (ev) {
+                ev.preventDefault();
+                z.drop.classList.remove('dragover');
+                setTarget(z);
+                var imgs = imageFiles(ev.dataTransfer);
+                if (imgs.length) { z.picker.addFiles(imgs); flash(z.drop); }
+            });
+        });
+
+        // A stray drop outside the boxes must not replace the whole page.
+        document.addEventListener('dragover', function (ev) { ev.preventDefault(); });
+        document.addEventListener('drop', function (ev) { ev.preventDefault(); });
+
+        document.addEventListener('paste', function (ev) {
+            var imgs = imageFiles(ev.clipboardData);
+            if (!imgs.length) { return; }
+            ev.preventDefault();
+            target.picker.addFiles(imgs.map(named));
+            flash(target.drop);
         });
     }
-    makePicker(document.getElementById('images'), document.getElementById('imagePreviews'), false);
-    makePicker(document.getElementById('support_screenshot'), document.getElementById('supportPreview'), true);
 
     var supportInput = document.getElementById('support_screenshot');
 

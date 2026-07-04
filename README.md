@@ -18,7 +18,7 @@ Public escalation platform for escalate.ispledger.com. When a customer feels nor
 |------|---------|
 | `index.php` | Public escalation wall: stats, filters, search, cards |
 | `view.php` | Single escalation: full story, image gallery, support reply, official response |
-| `submit.php` | Public submission form with live word counter and image previews |
+| `submit.php` | Public submission form with live word counter, image previews, and paste (Ctrl+V) / drag-and-drop uploads |
 | `api.php` | JSON API used by the billing panels (create + list); never redirects |
 | `admin.php` | Staff area: status, official reply, Telegram retry, delete |
 | `lib.php` | Shared helpers: validation, uploads, Telegram posting, page chrome |
