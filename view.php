@@ -106,7 +106,13 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
                     <?php if ($isStaff): ?><span class="staff-badge">Staff</span><?php else: ?> responded from their panel<?php endif; ?>
                     &middot; <?php echo e(timeAgo($r['created_at'])); ?>
                 </div>
-                <div class="comment-body"><?php echo e($r['body']); ?></div>
+                <div class="comment-body"><?php echo e($r['body']); ?><?php $rImgs = replyImages($r); if ($rImgs): ?>
+                    <div class="gallery">
+                        <?php foreach ($rImgs as $img): ?>
+                            <a href="<?php echo e($img); ?>" class="zoom"><img src="<?php echo e($img); ?>" alt="Reply image" loading="lazy"></a>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?></div>
             </div>
         </div>
         <?php endforeach; ?>

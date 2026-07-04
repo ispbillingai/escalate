@@ -54,8 +54,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
                 break;
             case 'thread_reply':
                 $body = trim((string)($_POST['reply_body'] ?? ''));
-                if ($body !== '') {
-                    addReply($row, 'staff', 'freeispradius team', $body, clientIp());
+                $replyImgs = normalizeFilesArray($_FILES['reply_images'] ?? null);
+                if ($body !== '' || $replyImgs) {
+                    addReply($row, 'staff', 'freeispradius team', $body, clientIp(), $replyImgs);
                 }
                 break;
             case 'retry_telegram':
@@ -151,7 +152,7 @@ pageHeader('Escalations moderation', '');
                 <?php foreach (array_slice($tRep, -3) as $r): ?>
                     <div style="font-size:12px;color:<?php echo $r['author_type'] === 'staff' ? 'var(--green)' : 'var(--muted)'; ?>;">
                         <b><?php echo $r['author_type'] === 'staff' ? 'Staff' : e($r['author_name'] !== '' ? $r['author_name'] : $row['company_name']); ?>:</b>
-                        <?php echo e(excerptWords($r['body'], 18)); ?>
+                        <?php echo e(excerptWords($r['body'], 18)); ?><?php $rImgCount = count(replyImages($r)); echo $rImgCount ? ' &#128247;' . $rImgCount : ''; ?>
                     </div>
                 <?php endforeach; ?>
                 <?php if (count($tRep) > 3): ?><div style="font-size:11.5px;color:var(--muted);"><?php echo count($tRep) - 3; ?> earlier repl<?php echo count($tRep) - 3 === 1 ? 'y' : 'ies'; ?> on the public page</div><?php endif; ?>
@@ -179,11 +180,12 @@ pageHeader('Escalations moderation', '');
                 <textarea name="official_reply" rows="3" style="width:100%;margin:8px 0;" placeholder="Official public reply (also posted to Telegram)"><?php echo e((string)$row['official_reply']); ?></textarea>
                 <button class="btn small" type="submit">Save</button>
             </form>
-            <form method="post" action="admin.php" style="margin-top:8px;">
+            <form method="post" action="admin.php" enctype="multipart/form-data" style="margin-top:8px;">
                 <input type="hidden" name="do" value="thread_reply">
                 <input type="hidden" name="rid" value="<?php echo (int)$row['id']; ?>">
                 <input type="hidden" name="back" value="<?php echo e($backQs); ?>">
                 <textarea name="reply_body" rows="2" style="width:100%;margin:0 0 6px;" placeholder="Post a reply in the public thread (also goes to Telegram)"></textarea>
+                <input type="file" name="reply_images[]" accept="image/*" multiple style="margin:0 0 6px;font-size:12px;">
                 <button class="btn small" type="submit">Post reply</button>
             </form>
             <form method="post" action="admin.php" style="display:inline-block;margin-top:8px;">

@@ -57,6 +57,7 @@ function getDB()
         author_type VARCHAR(10) NOT NULL DEFAULT 'company',
         author_name VARCHAR(160) NOT NULL DEFAULT '',
         body TEXT NOT NULL,
+        images_json TEXT NULL,
         submit_ip VARCHAR(45) NOT NULL DEFAULT '',
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         KEY idx_esc (escalation_id),
@@ -80,6 +81,15 @@ function getDB()
         } catch (Throwable $e) {
             error_log('[escalate] column heal failed: ' . $e->getMessage());
         }
+    }
+    try {
+        $col = $pdo->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'escalation_replies' AND COLUMN_NAME = 'images_json'")->fetchColumn();
+        if ((int)$col === 0) {
+            $pdo->exec("ALTER TABLE escalation_replies ADD COLUMN images_json TEXT NULL AFTER body");
+        }
+    } catch (Throwable $e) {
+        error_log('[escalate] reply column heal failed: ' . $e->getMessage());
     }
 
     return $pdo;

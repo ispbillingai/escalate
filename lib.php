@@ -174,10 +174,17 @@ function imagesOf(array $row)
 /** Replies for one escalation, oldest first. */
 function repliesOf($escalationId, $limit = 100)
 {
-    $stmt = getDB()->prepare("SELECT author_type, author_name, body, created_at
+    $stmt = getDB()->prepare("SELECT author_type, author_name, body, images_json, created_at
         FROM escalation_replies WHERE escalation_id = ? ORDER BY id ASC LIMIT " . (int)$limit);
     $stmt->execute([(int)$escalationId]);
     return $stmt->fetchAll();
+}
+
+/** Image paths attached to one reply row. */
+function replyImages(array $reply)
+{
+    $imgs = json_decode((string)($reply['images_json'] ?? ''), true);
+    return is_array($imgs) ? $imgs : [];
 }
 
 /** Replies for many escalations at once, keyed by escalation id. */
@@ -189,7 +196,7 @@ function repliesForAll(array $escalationIds, $limitPer = 30)
         return $out;
     }
     $marks = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = getDB()->prepare("SELECT escalation_id, author_type, author_name, body, created_at
+    $stmt = getDB()->prepare("SELECT escalation_id, author_type, author_name, body, images_json, created_at
         FROM escalation_replies WHERE escalation_id IN ($marks) ORDER BY id ASC");
     $stmt->execute($ids);
     foreach ($stmt->fetchAll() as $r) {
@@ -205,16 +212,19 @@ function repliesForAll(array $escalationIds, $limitPer = 30)
  * Add a reply to an escalation and post it to Telegram (best effort).
  * Returns [ok(bool), errorOrReplyRow].
  */
-function addReply(array $row, $authorType, $authorName, $body, $ip)
+function addReply(array $row, $authorType, $authorName, $body, $ip, array $imageFiles = [])
 {
     $body = trim((string)$body);
     $authorType = $authorType === 'staff' ? 'staff' : 'company';
     $authorName = mb_substr(trim((string)$authorName), 0, 160);
-    if (mb_strlen($body) < 2) {
+    if (mb_strlen($body) < 2 && !$imageFiles) {
         return [false, 'Write the reply first.'];
     }
     if (mb_strlen($body) > 4000) {
         return [false, 'Keep the reply under 4000 characters.'];
+    }
+    if (count($imageFiles) > MAX_IMAGES) {
+        return [false, 'A maximum of ' . MAX_IMAGES . ' images per reply is allowed.'];
     }
     $db = getDB();
     try {
@@ -231,14 +241,25 @@ function addReply(array $row, $authorType, $authorName, $body, $ip)
     } catch (Throwable $ex) {
         error_log('[escalate] reply rate check failed: ' . $ex->getMessage());
     }
-    $stmt = $db->prepare("INSERT INTO escalation_replies (escalation_id, author_type, author_name, body, submit_ip) VALUES (?,?,?,?,?)");
-    $stmt->execute([(int)$row['id'], $authorType, $authorName, $body, substr((string)$ip, 0, 45)]);
-    postThreadReplyToTelegram($row, $authorType, $authorName, $body);
-    return [true, ['author_type' => $authorType, 'author_name' => $authorName, 'body' => $body, 'created_at' => date('Y-m-d H:i:s')]];
+    $saved = [];
+    try {
+        foreach ($imageFiles as $i => $f) {
+            $saved[] = saveImage($f, 'Reply image ' . ($i + 1));
+        }
+    } catch (Exception $ex) {
+        foreach ($saved as $p) {
+            @unlink(__DIR__ . '/' . $p);
+        }
+        return [false, $ex->getMessage()];
+    }
+    $stmt = $db->prepare("INSERT INTO escalation_replies (escalation_id, author_type, author_name, body, images_json, submit_ip) VALUES (?,?,?,?,?,?)");
+    $stmt->execute([(int)$row['id'], $authorType, $authorName, $body, json_encode($saved), substr((string)$ip, 0, 45)]);
+    postThreadReplyToTelegram($row, $authorType, $authorName, $body, $saved);
+    return [true, ['author_type' => $authorType, 'author_name' => $authorName, 'body' => $body, 'images_json' => json_encode($saved), 'created_at' => date('Y-m-d H:i:s')]];
 }
 
 /** Post a thread reply under the original channel message. Best effort. */
-function postThreadReplyToTelegram(array $row, $authorType, $authorName, $body)
+function postThreadReplyToTelegram(array $row, $authorType, $authorName, $body, array $imagePaths = [])
 {
     try {
         $header = $authorType === 'staff'
@@ -246,7 +267,8 @@ function postThreadReplyToTelegram(array $row, $authorType, $authorName, $body)
             : "\u{1F7E0} CUSTOMER · " . mb_strtoupper($authorName !== '' ? $authorName : $row['company_name']) . " (from their billing panel)";
         $text = $header . "\n"
             . "REPLY ON ESCALATION #" . $row['public_id'] . "\n"
-            . "Customer: " . $row['company_name'] . "\n\n"
+            . "Customer: " . $row['company_name'] . "\n"
+            . ($imagePaths ? "Images attached below.\n" : '') . "\n"
             . mb_substr((string)$body, 0, 3500) . "\n\n"
             . escalationUrl($row['public_id']);
         $params = [
@@ -260,7 +282,42 @@ function postThreadReplyToTelegram(array $row, $authorType, $authorName, $body)
         if ($row['telegram_message_id'] !== '') {
             $params['reply_to_message_id'] = $row['telegram_message_id'];
         }
-        tgApi('sendMessage', $params);
+        $sent = tgApi('sendMessage', $params);
+        $replyMsgId = ($sent && !empty($sent['ok'])) ? (string)$sent['result']['message_id'] : '';
+
+        $paths = array_values(array_filter($imagePaths, function ($p) {
+            return $p !== '' && is_file(__DIR__ . '/' . $p);
+        }));
+        if ($paths) {
+            $caption = ($authorType === 'staff' ? "\u{1F7E2} Staff" : "\u{1F7E0} Customer " . $row['company_name'])
+                . ' · reply on escalation #' . $row['public_id'];
+            $photoParams = [
+                'chat_id' => TELEGRAM_CHAT_ID,
+            ];
+            if (telegramTopicId() > 0) {
+                $photoParams['message_thread_id'] = telegramTopicId();
+            }
+            if ($replyMsgId !== '') {
+                $photoParams['reply_to_message_id'] = $replyMsgId;
+            }
+            if (count($paths) === 1) {
+                $photoParams['photo'] = new CURLFile(__DIR__ . '/' . $paths[0]);
+                $photoParams['caption'] = $caption;
+                tgApi('sendPhoto', $photoParams);
+            } else {
+                $media = [];
+                foreach ($paths as $i => $p) {
+                    $item = ['type' => 'photo', 'media' => 'attach://photo' . $i];
+                    if ($i === 0) {
+                        $item['caption'] = $caption;
+                    }
+                    $media[] = $item;
+                    $photoParams['photo' . $i] = new CURLFile(__DIR__ . '/' . $p);
+                }
+                $photoParams['media'] = json_encode($media);
+                tgApi('sendMediaGroup', $photoParams);
+            }
+        }
     } catch (Throwable $ex) {
         error_log('[escalate] telegram thread reply failed: ' . $ex->getMessage());
     }

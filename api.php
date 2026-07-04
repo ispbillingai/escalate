@@ -61,6 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 'author'     => $r['author_type'],
                 'name'       => (string)$r['author_name'],
                 'body'       => (string)$r['body'],
+                'images'     => array_map(function ($p) {
+                    return rtrim(BASE_URL, '/') . '/' . $p;
+                }, replyImages($r)),
                 'created_at' => (string)$r['created_at'],
             ];
             if ($r['author_type'] === 'staff' && (string)$r['created_at'] > $signal) {
@@ -105,7 +108,8 @@ if (($_POST['action'] ?? '') === 'reply') {
         jout(['ok' => false, 'error' => 'Escalation not found for this account.'], 404);
     }
     $author = trim((string)($_POST['author'] ?? ''));
-    list($ok, $res) = addReply($row, 'company', $author !== '' ? $author : $row['company_name'], (string)($_POST['body'] ?? ''), clientIp());
+    $replyImgs = normalizeFilesArray($_FILES['images'] ?? null);
+    list($ok, $res) = addReply($row, 'company', $author !== '' ? $author : $row['company_name'], (string)($_POST['body'] ?? ''), clientIp(), $replyImgs);
     if (!$ok) {
         jout(['ok' => false, 'error' => $res], 422);
     }
