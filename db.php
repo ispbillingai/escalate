@@ -40,6 +40,7 @@ function getDB()
         status VARCHAR(20) NOT NULL DEFAULT 'open',
         official_reply TEXT NULL,
         replied_at DATETIME NULL,
+        customer_nudged_at DATETIME NULL,
         telegram_message_id VARCHAR(32) NOT NULL DEFAULT '',
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -67,9 +68,10 @@ function getDB()
 
     // Columns added after first release; heal older installs in place.
     $lateColumns = [
-        'account_manager' => "ADD COLUMN account_manager VARCHAR(120) NOT NULL DEFAULT '' AFTER support_screenshot",
-        'topic'           => "ADD COLUMN topic VARCHAR(60) NOT NULL DEFAULT '' AFTER account_manager, ADD KEY idx_topic (topic)",
-        'router'          => "ADD COLUMN router VARCHAR(120) NOT NULL DEFAULT '' AFTER topic",
+        'account_manager'    => "ADD COLUMN account_manager VARCHAR(120) NOT NULL DEFAULT '' AFTER support_screenshot",
+        'topic'              => "ADD COLUMN topic VARCHAR(60) NOT NULL DEFAULT '' AFTER account_manager, ADD KEY idx_topic (topic)",
+        'router'             => "ADD COLUMN router VARCHAR(120) NOT NULL DEFAULT '' AFTER topic",
+        'customer_nudged_at' => "ADD COLUMN customer_nudged_at DATETIME NULL AFTER replied_at",
     ];
     foreach ($lateColumns as $name => $ddl) {
         try {

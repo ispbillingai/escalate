@@ -3,5 +3,5 @@ uploads/*
 !uploads/.htaccess
 !uploads/index.html
 *.log
-tg_members.cache
+*.cache
 .claude/

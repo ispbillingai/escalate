@@ -20,8 +20,9 @@ Public escalation platform for escalate.ispledger.com. When a customer feels nor
 | `view.php` | Single escalation: full story, image gallery, support reply, official response |
 | `submit.php` | Public submission form with live word counter, image previews, and paste (Ctrl+V) / drag-and-drop uploads |
 | `api.php` | JSON API used by the billing panels (create + list); never redirects |
-| `admin.php` | Staff area: status, official reply, Telegram retry, delete |
-| `lib.php` | Shared helpers: validation, uploads, Telegram posting, page chrome |
+| `admin.php` | Staff area: status + reply composer (paste/drag-and-drop images), Telegram retry, delete |
+| `lib.php` | Shared helpers: validation, uploads, Telegram posting, reminders, page chrome |
+| `cron.php` | No-response reminder / auto-resolve worker (cron or HTTP) |
 | `db.php` | PDO connection, auto-creates the `escalations` table (BIGINT ids) |
 | `config.sample.php` | Copy to `config.php` and fill in |
 | `assets/style.css` | The deep-space theme |
@@ -74,6 +75,16 @@ server {
 Then point the `escalate` A record at the server and run `certbot --nginx -d escalate.ispledger.com`.
 
 Also raise PHP upload limits in php.ini so 4 pictures plus a screenshot fit: `upload_max_filesize = 6M`, `post_max_size = 30M`.
+
+## No-response reminders
+
+When staff replied last and the customer has been silent for `NUDGE_AFTER_HOURS` (default 48h), a reminder is posted on the thread (public page, panel and Telegram): *no response received in 2 days, the escalation resolves in 24 hours*. If the silence continues for `NUDGE_RESOLVE_AFTER_HOURS` more (default 24h), the status flips to Resolved with a closing note. A customer reply at any point cancels the countdown, and so does any staff action on the escalation.
+
+The pass runs opportunistically on page loads at most once an hour; for punctual delivery add a cron:
+
+```
+*/30 * * * * php /var/www/escalate/cron.php
+```
 
 ## Panel API
 

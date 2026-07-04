@@ -32,6 +32,7 @@ if (empty($_SESSION['esc_admin'])) {
 }
 
 $db = getDB();
+autoNudgeTick();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
     $rid = (int)($_POST['rid'] ?? 0);
@@ -41,22 +42,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
 
     if ($row) {
         switch ($_POST['do']) {
-            case 'save':
+            case 'respond':
+                // One composer: sets the status and, if anything was written or
+                // attached, posts it as a staff reply on the public thread.
                 $status = in_array($_POST['status'] ?? '', ['open', 'in_review', 'resolved'], true) ? $_POST['status'] : $row['status'];
-                $reply = trim((string)($_POST['official_reply'] ?? ''));
-                $replyChanged = $reply !== '' && $reply !== (string)$row['official_reply'];
-                $upd = $db->prepare("UPDATE escalations SET status = ?, official_reply = ?, replied_at = IF(? = '', replied_at, NOW()) WHERE id = ?");
-                $upd->execute([$status, $reply !== '' ? $reply : $row['official_reply'], $replyChanged ? 'x' : '', $rid]);
-                if ($replyChanged) {
-                    $row['status'] = $status;
-                    postReplyToTelegram($row, $reply);
-                }
-                break;
-            case 'thread_reply':
+                $upd = $db->prepare("UPDATE escalations SET status = ?, customer_nudged_at = NULL WHERE id = ?");
+                $upd->execute([$status, $rid]);
                 $body = trim((string)($_POST['reply_body'] ?? ''));
                 $replyImgs = normalizeFilesArray($_FILES['reply_images'] ?? null);
                 if ($body !== '' || $replyImgs) {
-                    addReply($row, 'staff', 'freeispradius team', $body, clientIp(), $replyImgs);
+                    $row['status'] = $status;
+                    list($ok,) = addReply($row, 'staff', 'freeispradius team', $body, clientIp(), $replyImgs);
+                    if ($ok) {
+                        $db->prepare("UPDATE escalations SET replied_at = NOW() WHERE id = ?")->execute([$rid]);
+                    }
                 }
                 break;
             case 'retry_telegram':
@@ -144,11 +143,15 @@ pageHeader('Escalations moderation', '');
                 <?php echo (string)($row['topic'] ?? '') !== '' ? '&middot; ' . e($row['topic']) : ''; ?>
                 <?php echo (string)($row['router'] ?? '') !== '' ? '&middot; router ' . e($row['router']) : ''; ?>
                 <?php echo $row['telegram_message_id'] === '' ? '&middot; <span style="color:var(--amber)">not on Telegram</span>' : ''; ?>
+                <?php echo !empty($row['customer_nudged_at']) && $row['status'] !== 'resolved' ? '&middot; <span style="color:var(--amber)">reminder sent ' . e(timeAgo($row['customer_nudged_at'])) . ', auto-resolves after ' . e(nudgeHoursHuman(nudgeResolveAfterHours())) . '</span>' : ''; ?>
             </span>
             <p style="margin-top:6px;color:#c6d1e8;"><?php echo e(excerptWords($row['issue'], 45)); ?></p>
             <?php $tRep = $adminThreads[(int)$row['id']] ?? []; ?>
-            <?php if ($tRep): ?>
+            <?php if ($tRep || (string)$row['official_reply'] !== ''): ?>
                 <div style="margin-top:6px;border-left:2px solid var(--border);padding-left:8px;">
+                <?php if ((string)$row['official_reply'] !== ''): ?>
+                    <div style="font-size:12px;color:var(--green);"><b>Official reply:</b> <?php echo e(excerptWords($row['official_reply'], 18)); ?></div>
+                <?php endif; ?>
                 <?php foreach (array_slice($tRep, -3) as $r): ?>
                     <div style="font-size:12px;color:<?php echo $r['author_type'] === 'staff' ? 'var(--green)' : 'var(--muted)'; ?>;">
                         <b><?php echo $r['author_type'] === 'staff' ? 'Staff' : e($r['author_name'] !== '' ? $r['author_name'] : $row['company_name']); ?>:</b>
@@ -168,8 +171,8 @@ pageHeader('Escalations moderation', '');
             <span style="color:var(--muted);font-size:12.5px;">IP <?php echo e($row['submit_ip']); ?></span>
         </td>
         <td style="min-width:290px;">
-            <form method="post" action="admin.php">
-                <input type="hidden" name="do" value="save">
+            <form method="post" action="admin.php" enctype="multipart/form-data" class="respond-form">
+                <input type="hidden" name="do" value="respond">
                 <input type="hidden" name="rid" value="<?php echo (int)$row['id']; ?>">
                 <input type="hidden" name="back" value="<?php echo e($backQs); ?>">
                 <select name="status">
@@ -177,16 +180,12 @@ pageHeader('Escalations moderation', '');
                     <option value="in_review" <?php echo $row['status'] === 'in_review' ? 'selected' : ''; ?>>In Review</option>
                     <option value="resolved" <?php echo $row['status'] === 'resolved' ? 'selected' : ''; ?>>Resolved</option>
                 </select>
-                <textarea name="official_reply" rows="3" style="width:100%;margin:8px 0;" placeholder="Official public reply (also posted to Telegram)"><?php echo e((string)$row['official_reply']); ?></textarea>
+                <textarea name="reply_body" rows="3" style="width:100%;margin:8px 0 0;" placeholder="Reply to the customer: posted on the public thread and Telegram"></textarea>
+                <label class="minidrop">Attach images: click, drag &amp; drop, or Ctrl+V
+                    <input type="file" name="reply_images[]" accept="image/*" multiple>
+                </label>
+                <div class="previews"></div>
                 <button class="btn small" type="submit">Save</button>
-            </form>
-            <form method="post" action="admin.php" enctype="multipart/form-data" style="margin-top:8px;">
-                <input type="hidden" name="do" value="thread_reply">
-                <input type="hidden" name="rid" value="<?php echo (int)$row['id']; ?>">
-                <input type="hidden" name="back" value="<?php echo e($backQs); ?>">
-                <textarea name="reply_body" rows="2" style="width:100%;margin:0 0 6px;" placeholder="Post a reply in the public thread (also goes to Telegram)"></textarea>
-                <input type="file" name="reply_images[]" accept="image/*" multiple style="margin:0 0 6px;font-size:12px;">
-                <button class="btn small" type="submit">Post reply</button>
             </form>
             <form method="post" action="admin.php" style="display:inline-block;margin-top:8px;">
                 <input type="hidden" name="do" value="retry_telegram">
@@ -207,6 +206,130 @@ pageHeader('Escalations moderation', '');
 </div>
 
 <script>
+// Reply composer: removable previews plus paste (Ctrl+V) and drag & drop.
+// Click into a row's reply box first; that composer becomes the paste target.
+(function () {
+    var MAX_IMAGES = <?php echo (int)MAX_IMAGES; ?>;
+    var canDT = true;
+    try { new DataTransfer(); } catch (e) { canDT = false; }
+    if (!canDT) { return; }   // the plain file input still works
+
+    var active = null;
+    var pasteN = 0;
+
+    function named(f) {
+        pasteN++;
+        var ext = (f.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+        try { return new File([f], 'pasted-' + Date.now() + '-' + pasteN + '.' + ext, { type: f.type }); }
+        catch (e) { return f; }
+    }
+    function imageFiles(dt) {
+        var out = [];
+        var items = (dt && dt.items) ? dt.items : [];
+        for (var i = 0; i < items.length; i++) {
+            if (items[i].kind === 'file') {
+                var f = items[i].getAsFile();
+                if (f && f.type.indexOf('image/') === 0) { out.push(f); }
+            }
+        }
+        if (!out.length && dt && dt.files) {
+            out = Array.prototype.slice.call(dt.files).filter(function (f) {
+                return f.type && f.type.indexOf('image/') === 0;
+            });
+        }
+        return out;
+    }
+    function flash(el) {
+        el.classList.remove('flash');
+        void el.offsetWidth;
+        el.classList.add('flash');
+    }
+
+    document.querySelectorAll('form.respond-form').forEach(function (form) {
+        form.classList.add('cdt');
+        var input = form.querySelector('input[type=file]');
+        var zone = form.querySelector('.minidrop');
+        var holder = form.querySelector('.previews');
+        var files = [];
+
+        function sync() {
+            var dt = new DataTransfer();
+            files.forEach(function (f) { dt.items.add(f); });
+            input.files = dt.files;
+            render();
+        }
+        function render() {
+            holder.innerHTML = '';
+            files.forEach(function (f, idx) {
+                var wrap = document.createElement('span');
+                wrap.className = 'pv';
+                var img = document.createElement('img');
+                img.src = URL.createObjectURL(f);
+                wrap.appendChild(img);
+                var x = document.createElement('button');
+                x.type = 'button';
+                x.className = 'pv-x';
+                x.title = 'Remove this image';
+                x.innerHTML = '&times;';
+                x.addEventListener('click', function () {
+                    files.splice(idx, 1);
+                    sync();
+                });
+                wrap.appendChild(x);
+                holder.appendChild(wrap);
+            });
+        }
+        function addFiles(list) {
+            var chosen = Array.prototype.slice.call(list || []).filter(function (f) {
+                return f.type && f.type.indexOf('image/') === 0;
+            });
+            if (!chosen.length) { return; }
+            chosen.forEach(function (f) {
+                var dup = files.some(function (g) { return g.name === f.name && g.size === f.size; });
+                if (!dup) { files.push(f); }
+            });
+            if (files.length > MAX_IMAGES) {
+                notify('Too many images', 'Only ' + MAX_IMAGES + ' images per reply, extra ones were dropped.', 'warning');
+                files = files.slice(0, MAX_IMAGES);
+            }
+            sync();
+        }
+        input.addEventListener('change', function () { addFiles(input.files); });
+
+        function setActive() {
+            active = { addFiles: addFiles, zone: zone };
+            document.querySelectorAll('.minidrop.target').forEach(function (el) { el.classList.remove('target'); });
+            zone.classList.add('target');
+        }
+        form.addEventListener('focusin', setActive);
+        form.addEventListener('click', setActive);
+        form.addEventListener('dragover', function (ev) {
+            ev.preventDefault();
+            zone.classList.add('dragover');
+        });
+        form.addEventListener('dragleave', function () { zone.classList.remove('dragover'); });
+        form.addEventListener('drop', function (ev) {
+            ev.preventDefault();
+            zone.classList.remove('dragover');
+            var imgs = imageFiles(ev.dataTransfer);
+            if (imgs.length) { setActive(); addFiles(imgs.map(named)); flash(zone); }
+        });
+    });
+
+    // A stray drop outside a composer must not replace the whole page.
+    document.addEventListener('dragover', function (ev) { ev.preventDefault(); });
+    document.addEventListener('drop', function (ev) { ev.preventDefault(); });
+
+    document.addEventListener('paste', function (ev) {
+        if (!active) { return; }
+        var imgs = imageFiles(ev.clipboardData);
+        if (!imgs.length) { return; }
+        ev.preventDefault();
+        active.addFiles(imgs.map(named));
+        flash(active.zone);
+    });
+})();
+
 document.querySelectorAll('form.confirm-delete').forEach(function (form) {
     form.addEventListener('submit', function (ev) {
         if (form.dataset.confirmed === '1') { return; }

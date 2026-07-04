@@ -46,6 +46,13 @@ define('PANEL_DOMAIN', 'ispledger.com');
 // Escalation topics, comma separated. Used on the form and as wall filters.
 define('ESCALATION_TOPICS', 'Billing & Payments,Payments Not Reflecting,Technical Billing Issues,Router / Connectivity,Hotspot Login Page,Speed & Bandwidth,SMS / Notifications,Non-responsive Support,Support Experience,Other');
 
+// No-response reminders. When staff replied last and the customer stays
+// silent for NUDGE_AFTER_HOURS, a reminder is posted on the thread; if the
+// silence continues for NUDGE_RESOLVE_AFTER_HOURS more, the escalation is
+// marked resolved automatically. Runs from cron.php or on page loads.
+define('NUDGE_AFTER_HOURS', 48);
+define('NUDGE_RESOLVE_AFTER_HOURS', 24);
+
 // Submission rules
 define('MIN_WORDS', 100);            // minimum words in the issue text
 define('MAX_IMAGES', 4);             // issue pictures per escalation

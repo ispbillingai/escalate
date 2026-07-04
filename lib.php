@@ -254,6 +254,14 @@ function addReply(array $row, $authorType, $authorName, $body, $ip, array $image
     }
     $stmt = $db->prepare("INSERT INTO escalation_replies (escalation_id, author_type, author_name, body, images_json, submit_ip) VALUES (?,?,?,?,?,?)");
     $stmt->execute([(int)$row['id'], $authorType, $authorName, $body, json_encode($saved), substr((string)$ip, 0, 45)]);
+    if ($authorType === 'company') {
+        // The customer spoke: any pending "no response in 2 days" countdown resets.
+        try {
+            $db->prepare("UPDATE escalations SET customer_nudged_at = NULL WHERE id = ?")->execute([(int)$row['id']]);
+        } catch (Throwable $ex) {
+            error_log('[escalate] nudge reset failed: ' . $ex->getMessage());
+        }
+    }
     postThreadReplyToTelegram($row, $authorType, $authorName, $body, $saved);
     return [true, ['author_type' => $authorType, 'author_name' => $authorName, 'body' => $body, 'images_json' => json_encode($saved), 'created_at' => date('Y-m-d H:i:s')]];
 }
@@ -268,6 +276,7 @@ function postThreadReplyToTelegram(array $row, $authorType, $authorName, $body, 
         $text = $header . "\n"
             . "REPLY ON ESCALATION #" . $row['public_id'] . "\n"
             . "Customer: " . $row['company_name'] . "\n"
+            . ($authorType === 'staff' ? "Status: " . statusMeta($row['status'])['label'] . "\n" : '')
             . ($imagePaths ? "Images attached below.\n" : '') . "\n"
             . mb_substr((string)$body, 0, 3500) . "\n\n"
             . escalationUrl($row['public_id']);
@@ -573,34 +582,6 @@ function postEscalationToTelegram(array $row)
     }
 }
 
-/** Post a status update or official reply under the original channel message. */
-function postReplyToTelegram(array $row, $replyText)
-{
-    try {
-        $text = "\u{1F7E2} FREEISPRADIUS TEAM (STAFF)\n"
-            . "UPDATE ON ESCALATION #" . $row['public_id'] . "\n"
-            . "Customer: " . $row['company_name'] . "\n"
-            . ($row['account_manager'] !== '' ? "Account manager: " . $row['account_manager'] . "\n" : '')
-            . "Status: " . statusMeta($row['status'])['label'] . "\n\n"
-            . mb_substr((string)$replyText, 0, 3500) . "\n\n"
-            . escalationUrl($row['public_id']);
-        $params = [
-            'chat_id'                  => TELEGRAM_CHAT_ID,
-            'text'                     => $text,
-            'disable_web_page_preview' => 'true',
-        ];
-        if (telegramTopicId() > 0) {
-            $params['message_thread_id'] = telegramTopicId();
-        }
-        if ($row['telegram_message_id'] !== '') {
-            $params['reply_to_message_id'] = $row['telegram_message_id'];
-        }
-        tgApi('sendMessage', $params);
-    } catch (Throwable $ex) {
-        error_log('[escalate] telegram reply failed: ' . $ex->getMessage());
-    }
-}
-
 /**
  * WhatsApp alert to staff when a new escalation lands. Best effort, never
  * blocks or fails the submission. Configured via WHATSAPP_ALERT_* constants.
@@ -631,6 +612,104 @@ function notifyEscalationByWhatsApp(array $row)
         curl_close($ch);
     } catch (Throwable $e) {
         error_log('[escalate] whatsapp alert failed: ' . $e->getMessage());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// No-response reminders. When staff replied and the customer has been silent
+// for NUDGE_AFTER_HOURS, a reminder is posted on the thread; if the silence
+// continues for NUDGE_RESOLVE_AFTER_HOURS more, the escalation auto-resolves.
+// Runs from cron.php and opportunistically on page loads (at most once/hour).
+
+function nudgeAfterHours()
+{
+    return defined('NUDGE_AFTER_HOURS') ? max(1, (int)NUDGE_AFTER_HOURS) : 48;
+}
+
+function nudgeResolveAfterHours()
+{
+    return defined('NUDGE_RESOLVE_AFTER_HOURS') ? max(1, (int)NUDGE_RESOLVE_AFTER_HOURS) : 24;
+}
+
+function nudgeHoursHuman($h)
+{
+    if ($h % 24 === 0) {
+        $d = (int)($h / 24);
+        return $d . ' day' . ($d === 1 ? '' : 's');
+    }
+    return $h . ' hour' . ($h === 1 ? '' : 's');
+}
+
+function runAutoNudges()
+{
+    $db = getDB();
+    $waitH = nudgeAfterHours();
+    $graceH = nudgeResolveAfterHours();
+
+    // 1. Remind: staff spoke last, the customer has been silent past the
+    //    window, and no reminder was sent yet for this waiting period.
+    $rows = $db->query("SELECT e.*,
+            (SELECT r.author_type FROM escalation_replies r WHERE r.escalation_id = e.id ORDER BY r.id DESC LIMIT 1) AS last_author,
+            (SELECT r.created_at FROM escalation_replies r WHERE r.escalation_id = e.id ORDER BY r.id DESC LIMIT 1) AS last_reply_at
+        FROM escalations e
+        WHERE e.status <> 'resolved' AND e.customer_nudged_at IS NULL")->fetchAll();
+    foreach ($rows as $row) {
+        if ($row['last_author'] === 'staff') {
+            $staffAt = $row['last_reply_at'];
+        } elseif ($row['last_author'] === null && (string)$row['official_reply'] !== '' && $row['replied_at']) {
+            $staffAt = $row['replied_at'];
+        } else {
+            continue;   // the ball is in our court, never rush the customer
+        }
+        if (strtotime((string)$staffAt) > time() - $waitH * 3600) {
+            continue;
+        }
+        // Guarded update so two overlapping runs cannot double-post.
+        $upd = $db->prepare("UPDATE escalations SET customer_nudged_at = NOW() WHERE id = ? AND customer_nudged_at IS NULL");
+        $upd->execute([(int)$row['id']]);
+        if ($upd->rowCount() > 0) {
+            addReply($row, 'staff', 'freeispradius team',
+                'Hello ' . $row['company_name'] . ', just checking in: we have not received a response from you in '
+                . nudgeHoursHuman($waitH) . '. If we do not hear back within the next ' . nudgeHoursHuman($graceH)
+                . ', this escalation will be marked as resolved. You can reply any time from your billing panel.',
+                'auto');
+        }
+    }
+
+    // 2. Resolve: the reminder aged past the grace window with no customer
+    //    reply since it was sent.
+    $stmt = $db->prepare("SELECT * FROM escalations e
+        WHERE e.status <> 'resolved' AND e.customer_nudged_at IS NOT NULL
+          AND e.customer_nudged_at <= DATE_SUB(NOW(), INTERVAL " . $graceH . " HOUR)
+          AND NOT EXISTS (SELECT 1 FROM escalation_replies r
+              WHERE r.escalation_id = e.id AND r.author_type = 'company' AND r.created_at >= e.customer_nudged_at)");
+    $stmt->execute();
+    foreach ($stmt->fetchAll() as $row) {
+        $upd = $db->prepare("UPDATE escalations SET status = 'resolved' WHERE id = ? AND status <> 'resolved'");
+        $upd->execute([(int)$row['id']]);
+        if ($upd->rowCount() > 0) {
+            $row['status'] = 'resolved';
+            addReply($row, 'staff', 'freeispradius team',
+                'We did not receive a response after our reminder, so this escalation has been marked as resolved. '
+                . 'If the issue is not sorted on your side, reply from your billing panel and the team will pick it up again.',
+                'auto');
+        }
+    }
+}
+
+/** Throttled entry point for page loads: runs the nudge pass at most hourly. */
+function autoNudgeTick()
+{
+    $stamp = __DIR__ . '/auto_nudge.cache';
+    $last = is_file($stamp) ? (int)file_get_contents($stamp) : 0;
+    if ($last > time() - 3600) {
+        return;
+    }
+    @file_put_contents($stamp, (string)time());
+    try {
+        runAutoNudges();
+    } catch (Throwable $ex) {
+        error_log('[escalate] auto nudge failed: ' . $ex->getMessage());
     }
 }
 

@@ -3,6 +3,7 @@
 require_once __DIR__ . '/lib.php';
 
 $db = getDB();
+autoNudgeTick();
 
 $status = $_GET['status'] ?? '';
 if (!in_array($status, ['open', 'in_review', 'resolved'], true)) {
@@ -51,6 +52,7 @@ $page = min($page, $pages);
 $stmt = $db->prepare("SELECT * FROM escalations $whereSql ORDER BY $orderSql LIMIT " . (($page - 1) * $perPage) . ", $perPage");
 $stmt->execute($args);
 $rows = $stmt->fetchAll();
+$wallThreads = repliesForAll(array_column($rows, 'id'));
 
 $counts = ['all' => 0, 'open' => 0, 'in_review' => 0, 'resolved' => 0];
 foreach ($db->query("SELECT status, COUNT(*) c FROM escalations GROUP BY status") as $r) {
@@ -158,7 +160,16 @@ pageHeader('Escalate by freeispradius: public escalation wall', 'wall');
             $meta = statusMeta($row['status']);
             $imgs = imagesOf($row);
             $url = 'view.php?id=' . rawurlencode($row['public_id']);
-            $hasReply = (string)$row['official_reply'] !== '' && $row['official_reply'] !== null;
+            $thread = $wallThreads[(int)$row['id']] ?? [];
+            $hasOfficial = (string)$row['official_reply'] !== '' && $row['official_reply'] !== null;
+            $staffReplied = $hasOfficial;
+            foreach ($thread as $r) {
+                if ($r['author_type'] === 'staff') {
+                    $staffReplied = true;
+                    break;
+                }
+            }
+            $replyCount = ($hasOfficial ? 1 : 0) + count($thread);
             $tcolor = nameColor((string)($row['topic'] ?? ''));
         ?>
         <article class="frow">
@@ -168,7 +179,7 @@ pageHeader('Escalate by freeispradius: public escalation wall', 'wall');
                 <?php if ((string)($row['topic'] ?? '') !== ''): ?>
                     <a class="tlabel" style="color:<?php echo $tcolor; ?>;border:1px solid <?php echo $tcolor; ?>55;background:<?php echo $tcolor; ?>14;" href="<?php echo e($filterUrl(['topic' => $row['topic'], 'page' => ''])); ?>"><?php echo e($row['topic']); ?></a>
                 <?php endif; ?>
-                <?php if ($hasReply): ?><span class="tlabel replied">Official reply</span><?php endif; ?>
+                <?php if ($staffReplied): ?><span class="tlabel replied">Team replied</span><?php endif; ?>
                 <div class="frow-meta">
                     #<?php echo e($row['public_id']); ?>
                     &middot; <b style="color:var(--text);font-weight:600;"><?php echo e($row['company_name']); ?></b>
@@ -178,7 +189,7 @@ pageHeader('Escalate by freeispradius: public escalation wall', 'wall');
             </div>
             <div class="frow-side">
                 <?php if ($imgs): ?><span class="fico" title="<?php echo count($imgs); ?> picture(s)">&#128444;&#65039; <?php echo count($imgs); ?></span><?php endif; ?>
-                <span class="fico" title="Official replies">&#128172; <?php echo $hasReply ? 1 : 0; ?></span>
+                <span class="fico" title="Replies">&#128172; <?php echo $replyCount; ?></span>
                 <span class="avatar" title="<?php echo e($row['company_name']); ?>" style="background:<?php echo nameColor($row['company_name']); ?>;"><?php echo e(avatarInitial($row['company_name'])); ?></span>
             </div>
         </article>
