@@ -190,6 +190,16 @@ a.stat-link b { color: #2ea6ff; }
     min-width: 210px;
 }
 .searchbox input:focus { outline: none; border-color: var(--accent); }
+.searchbox select {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 9px 10px;
+    font-size: 13.5px;
+    cursor: pointer;
+}
+.searchbox select:focus { outline: none; border-color: var(--accent); }
 
 /* Cards grid */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; margin-bottom: 40px; }

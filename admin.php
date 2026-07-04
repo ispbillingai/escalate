@@ -87,6 +87,14 @@ $status = $_GET['status'] ?? '';
 if (!in_array($status, ['open', 'in_review', 'resolved'], true)) {
     $status = '';
 }
+$who = $_GET['who'] ?? '';
+if (!in_array($who, ['needs_reply', 'waiting_customer', 'reminded'], true)) {
+    $who = '';
+}
+$sort = $_GET['sort'] ?? '';
+if (!in_array($sort, ['oldest', 'customer', 'staff', 'updated'], true)) {
+    $sort = '';
+}
 $aq = trim((string)($_GET['q'] ?? ''));
 $where = [];
 $args = [];
@@ -103,12 +111,47 @@ if ($aq !== '') {
     $args[] = '%' . $aq . '%';
     $args[] = '%' . $aq . '%';
 }
+if ($who === 'reminded') {
+    $where[] = "customer_nudged_at IS NOT NULL AND status <> 'resolved'";
+}
 $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
-$stmt = $db->prepare("SELECT * FROM escalations $whereSql ORDER BY id DESC LIMIT 200");
+
+// Whose court is the ball in: the author of the last thread reply, or, with
+// no replies yet, ours if an official reply was posted, else the customer's.
+$ballExpr = "COALESCE(
+    (SELECT r.author_type FROM escalation_replies r WHERE r.escalation_id = e.id ORDER BY r.id DESC LIMIT 1),
+    IF(COALESCE(e.official_reply, '') = '', 'company', 'staff'))";
+$havingSql = '';
+if ($who === 'needs_reply') {
+    $havingSql = "HAVING ball_with = 'company'";
+} elseif ($who === 'waiting_customer') {
+    $havingSql = "HAVING ball_with = 'staff'";
+}
+$orderSql = [
+    ''         => 'e.id DESC',
+    'oldest'   => 'e.id ASC',
+    'customer' => 'last_customer_at DESC',
+    'staff'    => 'last_staff_at DESC',
+    'updated'  => 'e.updated_at DESC',
+][$sort];
+
+$stmt = $db->prepare("SELECT e.*,
+        $ballExpr AS ball_with,
+        COALESCE((SELECT MAX(r.created_at) FROM escalation_replies r WHERE r.escalation_id = e.id AND r.author_type = 'company'), e.created_at) AS last_customer_at,
+        GREATEST(COALESCE(e.replied_at, '1970-01-01'),
+                 COALESCE((SELECT MAX(r.created_at) FROM escalation_replies r WHERE r.escalation_id = e.id AND r.author_type = 'staff'), '1970-01-01')) AS last_staff_at
+    FROM escalations e $whereSql $havingSql ORDER BY $orderSql LIMIT 200");
 $stmt->execute($args);
 $rows = $stmt->fetchAll();
 $adminThreads = repliesForAll(array_column($rows, 'id'));
-$backQs = http_build_query(array_filter(['status' => $status, 'q' => $aq]));
+$backQs = http_build_query(array_filter(['status' => $status, 'q' => $aq, 'who' => $who, 'sort' => $sort]));
+$adminUrl = function (array $overrides) use ($status, $aq, $who, $sort) {
+    $qs = http_build_query(array_filter(array_merge(
+        ['status' => $status, 'q' => $aq, 'who' => $who, 'sort' => $sort],
+        $overrides
+    ), function ($v) { return $v !== ''; }));
+    return 'admin.php' . ($qs !== '' ? '?' . $qs : '');
+};
 
 pageHeader('Escalations moderation', '');
 ?>
@@ -116,14 +159,27 @@ pageHeader('Escalations moderation', '');
 <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:30px 0 18px;">
     <h1 style="font-size:24px;">Moderation (<?php echo count($rows); ?>)</h1>
     <div class="tabs">
-        <a class="tab <?php echo $status === '' ? 'active' : ''; ?>" href="admin.php<?php echo $aq !== '' ? '?q=' . rawurlencode($aq) : ''; ?>">All</a>
-        <a class="tab <?php echo $status === 'open' ? 'active' : ''; ?>" href="admin.php?status=open<?php echo $aq !== '' ? '&q=' . rawurlencode($aq) : ''; ?>">Open</a>
-        <a class="tab <?php echo $status === 'in_review' ? 'active' : ''; ?>" href="admin.php?status=in_review<?php echo $aq !== '' ? '&q=' . rawurlencode($aq) : ''; ?>">In Review</a>
-        <a class="tab <?php echo $status === 'resolved' ? 'active' : ''; ?>" href="admin.php?status=resolved<?php echo $aq !== '' ? '&q=' . rawurlencode($aq) : ''; ?>">Resolved</a>
+        <a class="tab <?php echo $status === '' ? 'active' : ''; ?>" href="<?php echo e($adminUrl(['status' => ''])); ?>">All</a>
+        <a class="tab <?php echo $status === 'open' ? 'active' : ''; ?>" href="<?php echo e($adminUrl(['status' => 'open'])); ?>">Open</a>
+        <a class="tab <?php echo $status === 'in_review' ? 'active' : ''; ?>" href="<?php echo e($adminUrl(['status' => 'in_review'])); ?>">In Review</a>
+        <a class="tab <?php echo $status === 'resolved' ? 'active' : ''; ?>" href="<?php echo e($adminUrl(['status' => 'resolved'])); ?>">Resolved</a>
         <a class="tab" href="admin.php?logout=1">Sign out</a>
     </div>
     <form class="searchbox" method="get" action="admin.php">
         <?php if ($status !== ''): ?><input type="hidden" name="status" value="<?php echo e($status); ?>"><?php endif; ?>
+        <select name="who" onchange="this.form.submit()" aria-label="Filter by who replied last">
+            <option value="">All activity</option>
+            <option value="needs_reply" <?php echo $who === 'needs_reply' ? 'selected' : ''; ?>>Needs our reply</option>
+            <option value="waiting_customer" <?php echo $who === 'waiting_customer' ? 'selected' : ''; ?>>Waiting on customer</option>
+            <option value="reminded" <?php echo $who === 'reminded' ? 'selected' : ''; ?>>Reminder sent</option>
+        </select>
+        <select name="sort" onchange="this.form.submit()" aria-label="Sort escalations">
+            <option value="">Newest first</option>
+            <option value="oldest" <?php echo $sort === 'oldest' ? 'selected' : ''; ?>>Oldest first</option>
+            <option value="customer" <?php echo $sort === 'customer' ? 'selected' : ''; ?>>Latest from customer</option>
+            <option value="staff" <?php echo $sort === 'staff' ? 'selected' : ''; ?>>Latest replied by us</option>
+            <option value="updated" <?php echo $sort === 'updated' ? 'selected' : ''; ?>>Recently updated</option>
+        </select>
         <input type="text" name="q" value="<?php echo e($aq); ?>" placeholder="Search company, phone, manager, text...">
         <button class="btn small" type="submit">Search</button>
     </form>
@@ -136,7 +192,10 @@ pageHeader('Escalations moderation', '');
     <tr>
         <td style="max-width:420px;">
             <b><?php echo e($row['company_name']); ?></b>
-            <span class="pill <?php echo $meta['class']; ?>" style="margin-left:6px;"><?php echo $meta['label']; ?></span><br>
+            <span class="pill <?php echo $meta['class']; ?>" style="margin-left:6px;"><?php echo $meta['label']; ?></span>
+            <?php if ($row['ball_with'] === 'company' && $row['status'] !== 'resolved'): ?>
+                <span class="tlabel" style="color:var(--amber);border:1px solid #ffb02e55;background:#ffb02e14;margin-left:4px;">needs our reply</span>
+            <?php endif; ?><br>
             <span style="color:var(--muted);font-size:12.5px;">
                 #<?php echo e($row['public_id']); ?> &middot; <?php echo e($row['created_at']); ?> &middot; <?php echo e($row['source']); ?>
                 <?php echo $row['subdomain'] !== '' ? '&middot; ' . e($row['subdomain']) : ''; ?>
