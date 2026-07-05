@@ -266,23 +266,30 @@ function addReply(array $row, $authorType, $authorName, $body, $ip, array $image
     return [true, ['author_type' => $authorType, 'author_name' => $authorName, 'body' => $body, 'images_json' => json_encode($saved), 'created_at' => date('Y-m-d H:i:s')]];
 }
 
-/** Post a thread reply under the original channel message. Best effort. */
+/** Post a thread reply under the original channel message. Best effort.
+ *  Sent as Telegram HTML: bold header, and the reply body inside a
+ *  <blockquote> so what was actually said stands apart from the metadata. */
 function postThreadReplyToTelegram(array $row, $authorType, $authorName, $body, array $imagePaths = [])
 {
     try {
+        $esc = function ($s) {
+            return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+        };
         $header = $authorType === 'staff'
-            ? "\u{1F7E2} FREEISPRADIUS TEAM (STAFF)"
-            : "\u{1F7E0} CUSTOMER · " . mb_strtoupper($authorName !== '' ? $authorName : $row['company_name']) . " (from their billing panel)";
+            ? "\u{1F7E2} <b>FREEISPRADIUS TEAM (STAFF)</b>"
+            : "\u{1F7E0} <b>CUSTOMER · " . $esc(mb_strtoupper($authorName !== '' ? $authorName : $row['company_name'])) . "</b> (from their billing panel)";
+        $bodyText = trim(mb_substr((string)$body, 0, 3500));
         $text = $header . "\n"
-            . "REPLY ON ESCALATION #" . $row['public_id'] . "\n"
-            . "Customer: " . $row['company_name'] . "\n"
-            . ($authorType === 'staff' ? "Status: " . statusMeta($row['status'])['label'] . "\n" : '')
+            . "<b>REPLY ON ESCALATION #" . $esc($row['public_id']) . "</b>\n"
+            . "Customer: " . $esc($row['company_name']) . "\n"
+            . ($authorType === 'staff' ? "Status: " . $esc(statusMeta($row['status'])['label']) . "\n" : '')
             . ($imagePaths ? "Images attached below.\n" : '') . "\n"
-            . mb_substr((string)$body, 0, 3500) . "\n\n"
+            . ($bodyText !== '' ? "<blockquote>" . $esc($bodyText) . "</blockquote>\n\n" : '')
             . escalationUrl($row['public_id']);
         $params = [
             'chat_id'                  => TELEGRAM_CHAT_ID,
             'text'                     => $text,
+            'parse_mode'               => 'HTML',
             'disable_web_page_preview' => 'true',
         ];
         if (telegramTopicId() > 0) {
