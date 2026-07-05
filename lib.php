@@ -619,6 +619,9 @@ function notifyEscalationByWhatsApp(array $row)
 // No-response reminders. When staff replied and the customer has been silent
 // for NUDGE_AFTER_HOURS, a reminder is posted on the thread; if the silence
 // continues for NUDGE_RESOLVE_AFTER_HOURS more, the escalation auto-resolves.
+// ONLY In Review threads participate: an Open escalation is one the team has
+// not taken up yet, so it is never nudged and never auto-closed. Staff move a
+// thread to In Review from the admin composer when they start handling it.
 // Runs from cron.php and opportunistically on page loads (at most once/hour).
 
 function nudgeAfterHours()
@@ -652,7 +655,7 @@ function runAutoNudges()
             (SELECT r.author_type FROM escalation_replies r WHERE r.escalation_id = e.id ORDER BY r.id DESC LIMIT 1) AS last_author,
             (SELECT r.created_at FROM escalation_replies r WHERE r.escalation_id = e.id ORDER BY r.id DESC LIMIT 1) AS last_reply_at
         FROM escalations e
-        WHERE e.status <> 'resolved' AND e.customer_nudged_at IS NULL")->fetchAll();
+        WHERE e.status = 'in_review' AND e.customer_nudged_at IS NULL")->fetchAll();
     foreach ($rows as $row) {
         if ($row['last_author'] === 'staff') {
             $staffAt = $row['last_reply_at'];
@@ -679,13 +682,13 @@ function runAutoNudges()
     // 2. Resolve: the reminder aged past the grace window with no customer
     //    reply since it was sent.
     $stmt = $db->prepare("SELECT * FROM escalations e
-        WHERE e.status <> 'resolved' AND e.customer_nudged_at IS NOT NULL
+        WHERE e.status = 'in_review' AND e.customer_nudged_at IS NOT NULL
           AND e.customer_nudged_at <= DATE_SUB(NOW(), INTERVAL " . $graceH . " HOUR)
           AND NOT EXISTS (SELECT 1 FROM escalation_replies r
               WHERE r.escalation_id = e.id AND r.author_type = 'company' AND r.created_at >= e.customer_nudged_at)");
     $stmt->execute();
     foreach ($stmt->fetchAll() as $row) {
-        $upd = $db->prepare("UPDATE escalations SET status = 'resolved' WHERE id = ? AND status <> 'resolved'");
+        $upd = $db->prepare("UPDATE escalations SET status = 'resolved' WHERE id = ? AND status = 'in_review'");
         $upd->execute([(int)$row['id']]);
         if ($upd->rowCount() > 0) {
             $row['status'] = 'resolved';

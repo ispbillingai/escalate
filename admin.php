@@ -202,7 +202,7 @@ pageHeader('Escalations moderation', '');
                 <?php echo (string)($row['topic'] ?? '') !== '' ? '&middot; ' . e($row['topic']) : ''; ?>
                 <?php echo (string)($row['router'] ?? '') !== '' ? '&middot; router ' . e($row['router']) : ''; ?>
                 <?php echo $row['telegram_message_id'] === '' ? '&middot; <span style="color:var(--amber)">not on Telegram</span>' : ''; ?>
-                <?php echo !empty($row['customer_nudged_at']) && $row['status'] !== 'resolved' ? '&middot; <span style="color:var(--amber)">reminder sent ' . e(timeAgo($row['customer_nudged_at'])) . ', auto-resolves after ' . e(nudgeHoursHuman(nudgeResolveAfterHours())) . '</span>' : ''; ?>
+                <?php echo !empty($row['customer_nudged_at']) && $row['status'] === 'in_review' ? '&middot; <span style="color:var(--amber)">reminder sent ' . e(timeAgo($row['customer_nudged_at'])) . ', auto-resolves after ' . e(nudgeHoursHuman(nudgeResolveAfterHours())) . '</span>' : ''; ?>
             </span>
             <p style="margin-top:6px;color:#c6d1e8;"><?php echo e(excerptWords($row['issue'], 45)); ?></p>
             <?php $tRep = $adminThreads[(int)$row['id']] ?? []; ?>
