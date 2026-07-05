@@ -753,6 +753,28 @@ function createEscalation(array $in, array $issueFiles, $supportFile, $source)
         $company = $sub;
     }
 
+    // One escalation at a time: while this customer still has an unresolved
+    // escalation on the wall, a fresh one is refused and they are pointed at
+    // the existing thread instead. Marking it resolved frees the slot again.
+    if (!$errors) {
+        try {
+            $stmt = getDB()->prepare("SELECT public_id, status, created_at FROM escalations
+                WHERE " . ($sub !== '' ? 'subdomain' : 'company_name') . " = ? AND status <> 'resolved'
+                ORDER BY id DESC LIMIT 1");
+            $stmt->execute([$sub !== '' ? $sub : $company]);
+            $open = $stmt->fetch();
+            if ($open) {
+                return [false, ['errors' => ['You already have an escalation that is still '
+                    . statusMeta($open['status'])['label'] . ': #' . $open['public_id']
+                    . ', raised ' . timeAgo($open['created_at'])
+                    . '. One escalation is allowed at a time, so reply on that thread instead; replies reach the team just as loudly. Once it is marked resolved you can raise a new one. '
+                    . escalationUrl($open['public_id'])]]];
+            }
+        } catch (Throwable $ex) {
+            error_log('[escalate] open-escalation check failed: ' . $ex->getMessage());
+        }
+    }
+
     if (!in_array($topic, escalationTopics(), true)) {
         $topic = 'Other';
     }
