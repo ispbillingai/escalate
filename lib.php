@@ -259,26 +259,74 @@ function addReply(array $row, $authorType, $authorName, $body, $ip, array $image
     return [true, ['author_type' => $authorType, 'author_name' => $authorName, 'body' => $body, 'images_json' => json_encode($saved), 'created_at' => date('Y-m-d H:i:s')]];
 }
 
-/** Post a thread reply under the original channel message. Best effort.
- *  Sent as Telegram HTML: bold header, and the reply body inside a
- *  <blockquote> so what was actually said stands apart from the metadata. */
+/**
+ * The other party's last message with text, for quoting in a Telegram reply.
+ * Falls back to the official reply (staff) or the escalation itself (company)
+ * when that side never wrote on the thread. Returns null when there is
+ * nothing to quote; 'what' labels non-thread sources.
+ */
+function lastThreadMessageFrom(array $row, $authorType)
+{
+    try {
+        $stmt = getDB()->prepare("SELECT author_name, body FROM escalation_replies
+            WHERE escalation_id = ? AND author_type = ? AND TRIM(body) <> '' ORDER BY id DESC LIMIT 1");
+        $stmt->execute([(int)$row['id'], $authorType]);
+        $r = $stmt->fetch();
+        if ($r) {
+            $name = $authorType === 'staff' ? 'freeispradius team'
+                : ((string)$r['author_name'] !== '' ? $r['author_name'] : $row['company_name']);
+            return ['name' => $name, 'body' => $r['body'], 'what' => ''];
+        }
+    } catch (Throwable $ex) {
+        error_log('[escalate] quote lookup failed: ' . $ex->getMessage());
+    }
+    if ($authorType === 'staff') {
+        return (string)$row['official_reply'] !== ''
+            ? ['name' => 'freeispradius team', 'body' => $row['official_reply'], 'what' => 'official reply']
+            : null;
+    }
+    return ['name' => $row['company_name'], 'body' => $row['issue'], 'what' => 'their escalation'];
+}
+
+/**
+ * The HTML text of a thread reply post: bold header, a collapsed quote of the
+ * other party's last message for context, then the new reply in a blockquote.
+ */
+function buildThreadReplyText(array $row, $authorType, $authorName, $body, $hasImages = false)
+{
+    $esc = function ($s) {
+        return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+    };
+    $header = $authorType === 'staff'
+        ? "\u{1F7E2} <b>FREEISPRADIUS TEAM (STAFF)</b>"
+        : "\u{1F7E0} <b>CUSTOMER · " . $esc(mb_strtoupper($authorName !== '' ? $authorName : $row['company_name'])) . "</b> (from their billing panel)";
+    $bodyText = trim(mb_substr((string)$body, 0, 3000));
+
+    $quoteHtml = '';
+    $quoted = lastThreadMessageFrom($row, $authorType === 'staff' ? 'company' : 'staff');
+    if ($quoted !== null && trim((string)$quoted['body']) !== '') {
+        $qBody = trim(preg_replace('/\n{3,}/u', "\n\n", (string)$quoted['body']));
+        $qCut = mb_substr($qBody, 0, 500) . (mb_strlen($qBody) > 500 ? "\u{2026}" : '');
+        $quoteHtml = "\u{21A9} In reply to " . ($authorType === 'staff' ? "\u{1F7E0}" : "\u{1F7E2}")
+            . " <b>" . $esc($quoted['name']) . "</b>" . ($quoted['what'] !== '' ? ' (' . $quoted['what'] . ')' : '') . ":\n"
+            . "<blockquote expandable><i>" . $esc($qCut) . "</i></blockquote>\n";
+    }
+
+    return $header . "\n"
+        . "<b>REPLY ON ESCALATION #" . $esc($row['public_id']) . "</b>\n"
+        . "Customer: " . $esc($row['company_name']) . "\n"
+        . ($authorType === 'staff' ? "Status: " . $esc(statusMeta($row['status'])['label']) . "\n" : '')
+        . ($hasImages ? "Images attached below.\n" : '') . "\n"
+        . $quoteHtml
+        . ($bodyText !== '' ? "<blockquote>" . $esc($bodyText) . "</blockquote>\n\n" : "\n")
+        . escalationUrl($row['public_id']);
+}
+
+/** Post a thread reply under the original channel message. Best effort. */
 function postThreadReplyToTelegram(array $row, $authorType, $authorName, $body, array $imagePaths = [])
 {
     try {
-        $esc = function ($s) {
-            return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
-        };
-        $header = $authorType === 'staff'
-            ? "\u{1F7E2} <b>FREEISPRADIUS TEAM (STAFF)</b>"
-            : "\u{1F7E0} <b>CUSTOMER · " . $esc(mb_strtoupper($authorName !== '' ? $authorName : $row['company_name'])) . "</b> (from their billing panel)";
-        $bodyText = trim(mb_substr((string)$body, 0, 3500));
-        $text = $header . "\n"
-            . "<b>REPLY ON ESCALATION #" . $esc($row['public_id']) . "</b>\n"
-            . "Customer: " . $esc($row['company_name']) . "\n"
-            . ($authorType === 'staff' ? "Status: " . $esc(statusMeta($row['status'])['label']) . "\n" : '')
-            . ($imagePaths ? "Images attached below.\n" : '') . "\n"
-            . ($bodyText !== '' ? "<blockquote>" . $esc($bodyText) . "</blockquote>\n\n" : '')
-            . escalationUrl($row['public_id']);
+        $text = buildThreadReplyText($row, $authorType, $authorName, $body, (bool)$imagePaths);
         $params = [
             'chat_id'                  => TELEGRAM_CHAT_ID,
             'text'                     => $text,
