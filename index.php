@@ -170,14 +170,13 @@ pageHeader('Escalate by freeispradius: public escalation wall', 'wall');
                 }
             }
             $replyCount = ($hasOfficial ? 1 : 0) + count($thread);
-            $tcolor = nameColor((string)($row['topic'] ?? ''));
         ?>
         <article class="frow">
             <span class="frow-state <?php echo $meta['state']; ?>" title="<?php echo $meta['label']; ?>"><?php echo $meta['icon']; ?></span>
             <div class="frow-main">
                 <a class="frow-title" href="<?php echo e($url); ?>"><?php echo e(excerptWords($row['issue'], 12)); ?></a>
                 <?php if ((string)($row['topic'] ?? '') !== ''): ?>
-                    <a class="tlabel" style="color:<?php echo $tcolor; ?>;border:1px solid <?php echo $tcolor; ?>55;background:<?php echo $tcolor; ?>14;" href="<?php echo e($filterUrl(['topic' => $row['topic'], 'page' => ''])); ?>"><?php echo e($row['topic']); ?></a>
+                    <a class="tlabel topic" href="<?php echo e($filterUrl(['topic' => $row['topic'], 'page' => ''])); ?>"><?php echo e($row['topic']); ?></a>
                 <?php endif; ?>
                 <?php if ($staffReplied): ?><span class="tlabel replied">Team replied</span><?php endif; ?>
                 <div class="frow-meta">
@@ -190,7 +189,7 @@ pageHeader('Escalate by freeispradius: public escalation wall', 'wall');
             <div class="frow-side">
                 <?php if ($imgs): ?><span class="fico" title="<?php echo count($imgs); ?> picture(s)">&#128444;&#65039; <?php echo count($imgs); ?></span><?php endif; ?>
                 <span class="fico" title="Replies">&#128172; <?php echo $replyCount; ?></span>
-                <span class="avatar" title="<?php echo e($row['company_name']); ?>" style="background:<?php echo nameColor($row['company_name']); ?>;"><?php echo e(avatarInitial($row['company_name'])); ?></span>
+                <span class="avatar" title="<?php echo e($row['company_name']); ?>"><?php echo e(avatarInitial($row['company_name'])); ?></span>
             </div>
         </article>
         <?php endforeach; ?>

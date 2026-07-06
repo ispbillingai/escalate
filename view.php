@@ -32,7 +32,6 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
         </div>
     <?php endif; ?>
 
-    <?php $tcolor = nameColor((string)($row['topic'] ?? '')); ?>
     <div class="detail-head">
         <div>
             <h1><?php echo e(excerptWords($row['issue'], 12)); ?></h1>
@@ -43,7 +42,7 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
                 &middot; opened <?php echo e(timeAgo($row['created_at'])); ?>
                 <?php echo $row['source'] === 'panel' ? 'from their billing panel' : 'on the public platform'; ?>
                 <?php if ((string)($row['topic'] ?? '') !== ''): ?>
-                    &middot; <a class="tlabel" style="color:<?php echo $tcolor; ?>;border:1px solid <?php echo $tcolor; ?>55;background:<?php echo $tcolor; ?>14;" href="index.php?topic=<?php echo e(rawurlencode($row['topic'])); ?>#wall"><?php echo e($row['topic']); ?></a>
+                    &middot; <a class="tlabel topic" href="index.php?topic=<?php echo e(rawurlencode($row['topic'])); ?>#wall"><?php echo e($row['topic']); ?></a>
                 <?php endif; ?>
                 <?php if ($row['account_manager'] !== ''): ?>&middot; account manager <?php echo e($row['account_manager']); ?><?php endif; ?>
                 <?php if ((string)($row['router'] ?? '') !== ''): ?>&middot; router <?php echo e($row['router']); ?><?php endif; ?>
@@ -54,7 +53,7 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
 
     <div class="thread">
         <div class="tl-item">
-            <span class="avatar big" style="background:<?php echo nameColor($row['company_name']); ?>;"><?php echo e(avatarInitial($row['company_name'])); ?></span>
+            <span class="avatar big"><?php echo e(avatarInitial($row['company_name'])); ?></span>
             <div class="comment">
                 <div class="comment-head"><b><?php echo e($row['company_name']); ?></b> opened this escalation &middot; <?php echo e(timeAgo($row['created_at'])); ?></div>
                 <div class="comment-body"><?php echo e($row['issue']); ?><?php if ($imgs): ?>
@@ -68,7 +67,7 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
         </div>
 
         <div class="tl-item">
-            <span class="avatar big" style="background:#3a4664;color:#e8ecf7;">&#127911;</span>
+            <span class="avatar big">&#127911;</span>
             <div class="comment">
                 <div class="comment-head"><b>What normal support said</b> &middot; screenshot provided by the company</div>
                 <div class="comment-body"><?php if ($row['support_screenshot'] !== ''): ?>
@@ -84,7 +83,7 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
         <?php $hasOfficial = (string)$row['official_reply'] !== '' && $row['official_reply'] !== null; ?>
         <?php if ($hasOfficial): ?>
         <div class="tl-item">
-            <span class="avatar big" style="background:var(--green);color:#06281c;">FR</span>
+            <span class="avatar big staff">FR</span>
             <div class="comment staff">
                 <div class="comment-head"><b>freeispradius team</b> <span class="staff-badge">Staff</span><?php echo $row['replied_at'] ? ' &middot; ' . e(timeAgo($row['replied_at'])) : ''; ?></div>
                 <div class="comment-body"><?php echo e($row['official_reply']); ?></div>
@@ -96,9 +95,9 @@ pageHeader('Escalation #' . $row['public_id'] . ' from ' . $row['company_name'],
         <?php foreach ($thread as $r): $isStaff = $r['author_type'] === 'staff'; ?>
         <div class="tl-item">
             <?php if ($isStaff): ?>
-                <span class="avatar big" style="background:var(--green);color:#06281c;">FR</span>
+                <span class="avatar big staff">FR</span>
             <?php else: ?>
-                <span class="avatar big" style="background:<?php echo nameColor($row['company_name']); ?>;"><?php echo e(avatarInitial($row['company_name'])); ?></span>
+                <span class="avatar big"><?php echo e(avatarInitial($row['company_name'])); ?></span>
             <?php endif; ?>
             <div class="comment <?php echo $isStaff ? 'staff' : ''; ?>">
                 <div class="comment-head">

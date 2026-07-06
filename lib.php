@@ -134,13 +134,6 @@ function statusMeta($status)
     }
 }
 
-/** Flat avatar/label color, deterministic per name. */
-function nameColor($name)
-{
-    $palette = ['#5b8cff', '#2ee6a8', '#ffb02e', '#ff5d73', '#b58cff', '#4dd0e1', '#f472b6', '#9ccc65'];
-    return $palette[abs(crc32(strtolower((string)$name))) % count($palette)];
-}
-
 /** Uppercase first letter for the avatar circle. */
 function avatarInitial($name)
 {
