@@ -59,6 +59,7 @@ function getDB()
         author_name VARCHAR(160) NOT NULL DEFAULT '',
         body TEXT NOT NULL,
         images_json TEXT NULL,
+        telegram_message_id VARCHAR(32) NOT NULL DEFAULT '',
         submit_ip VARCHAR(45) NOT NULL DEFAULT '',
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         KEY idx_esc (escalation_id),
@@ -84,14 +85,20 @@ function getDB()
             error_log('[escalate] column heal failed: ' . $e->getMessage());
         }
     }
-    try {
-        $col = $pdo->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'escalation_replies' AND COLUMN_NAME = 'images_json'")->fetchColumn();
-        if ((int)$col === 0) {
-            $pdo->exec("ALTER TABLE escalation_replies ADD COLUMN images_json TEXT NULL AFTER body");
+    $replyLateColumns = [
+        'images_json'         => "ADD COLUMN images_json TEXT NULL AFTER body",
+        'telegram_message_id' => "ADD COLUMN telegram_message_id VARCHAR(32) NOT NULL DEFAULT '' AFTER images_json",
+    ];
+    foreach ($replyLateColumns as $name => $ddl) {
+        try {
+            $col = $pdo->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'escalation_replies' AND COLUMN_NAME = '{$name}'")->fetchColumn();
+            if ((int)$col === 0) {
+                $pdo->exec("ALTER TABLE escalation_replies {$ddl}");
+            }
+        } catch (Throwable $e) {
+            error_log('[escalate] reply column heal failed: ' . $e->getMessage());
         }
-    } catch (Throwable $e) {
-        error_log('[escalate] reply column heal failed: ' . $e->getMessage());
     }
 
     return $pdo;

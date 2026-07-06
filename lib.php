@@ -247,6 +247,7 @@ function addReply(array $row, $authorType, $authorName, $body, $ip, array $image
     }
     $stmt = $db->prepare("INSERT INTO escalation_replies (escalation_id, author_type, author_name, body, images_json, submit_ip) VALUES (?,?,?,?,?,?)");
     $stmt->execute([(int)$row['id'], $authorType, $authorName, $body, json_encode($saved), substr((string)$ip, 0, 45)]);
+    $replyRowId = (int)$db->lastInsertId();
     if ($authorType === 'company') {
         // The customer spoke: any pending "no response in 2 days" countdown resets.
         try {
@@ -255,43 +256,41 @@ function addReply(array $row, $authorType, $authorName, $body, $ip, array $image
             error_log('[escalate] nudge reset failed: ' . $ex->getMessage());
         }
     }
-    postThreadReplyToTelegram($row, $authorType, $authorName, $body, $saved);
+    $tgMsgId = postThreadReplyToTelegram($row, $authorType, $authorName, $body, $saved);
+    if ($tgMsgId !== '') {
+        // Remembered so the other party's next reply can attach to this
+        // message and show Telegram's native reply highlight.
+        try {
+            $db->prepare("UPDATE escalation_replies SET telegram_message_id = ? WHERE id = ?")->execute([$tgMsgId, $replyRowId]);
+        } catch (Throwable $ex) {
+            error_log('[escalate] reply message id save failed: ' . $ex->getMessage());
+        }
+    }
     return [true, ['author_type' => $authorType, 'author_name' => $authorName, 'body' => $body, 'images_json' => json_encode($saved), 'created_at' => date('Y-m-d H:i:s')]];
 }
 
 /**
- * The other party's last message with text, for quoting in a Telegram reply.
- * Falls back to the official reply (staff) or the escalation itself (company)
- * when that side never wrote on the thread. Returns null when there is
- * nothing to quote; 'what' labels non-thread sources.
+ * The Telegram message a new thread reply should attach to, so the channel
+ * shows the native reply highlight: the other party's last posted reply,
+ * falling back to the original escalation post. '' when neither exists.
  */
-function lastThreadMessageFrom(array $row, $authorType)
+function threadReplyTargetMessageId(array $row, $authorType)
 {
     try {
-        $stmt = getDB()->prepare("SELECT author_name, body FROM escalation_replies
-            WHERE escalation_id = ? AND author_type = ? AND TRIM(body) <> '' ORDER BY id DESC LIMIT 1");
-        $stmt->execute([(int)$row['id'], $authorType]);
-        $r = $stmt->fetch();
-        if ($r) {
-            $name = $authorType === 'staff' ? 'freeispradius team'
-                : ((string)$r['author_name'] !== '' ? $r['author_name'] : $row['company_name']);
-            return ['name' => $name, 'body' => $r['body'], 'what' => ''];
+        $stmt = getDB()->prepare("SELECT telegram_message_id FROM escalation_replies
+            WHERE escalation_id = ? AND author_type = ? AND telegram_message_id <> '' ORDER BY id DESC LIMIT 1");
+        $stmt->execute([(int)$row['id'], $authorType === 'staff' ? 'company' : 'staff']);
+        $mid = (string)$stmt->fetchColumn();
+        if ($mid !== '') {
+            return $mid;
         }
     } catch (Throwable $ex) {
-        error_log('[escalate] quote lookup failed: ' . $ex->getMessage());
+        error_log('[escalate] reply target lookup failed: ' . $ex->getMessage());
     }
-    if ($authorType === 'staff') {
-        return (string)$row['official_reply'] !== ''
-            ? ['name' => 'freeispradius team', 'body' => $row['official_reply'], 'what' => 'official reply']
-            : null;
-    }
-    return ['name' => $row['company_name'], 'body' => $row['issue'], 'what' => 'their escalation'];
+    return (string)$row['telegram_message_id'];
 }
 
-/**
- * The HTML text of a thread reply post: bold header, a collapsed quote of the
- * other party's last message for context, then the new reply in a blockquote.
- */
+/** The HTML text of a thread reply post: bold header, body in a blockquote. */
 function buildThreadReplyText(array $row, $authorType, $authorName, $body, $hasImages = false)
 {
     $esc = function ($s) {
@@ -300,29 +299,23 @@ function buildThreadReplyText(array $row, $authorType, $authorName, $body, $hasI
     $header = $authorType === 'staff'
         ? "\u{1F7E2} <b>FREEISPRADIUS TEAM (STAFF)</b>"
         : "\u{1F7E0} <b>CUSTOMER · " . $esc(mb_strtoupper($authorName !== '' ? $authorName : $row['company_name'])) . "</b> (from their billing panel)";
-    $bodyText = trim(mb_substr((string)$body, 0, 3000));
-
-    $quoteHtml = '';
-    $quoted = lastThreadMessageFrom($row, $authorType === 'staff' ? 'company' : 'staff');
-    if ($quoted !== null && trim((string)$quoted['body']) !== '') {
-        $qBody = trim(preg_replace('/\n{3,}/u', "\n\n", (string)$quoted['body']));
-        $qCut = mb_substr($qBody, 0, 500) . (mb_strlen($qBody) > 500 ? "\u{2026}" : '');
-        $quoteHtml = "\u{21A9} In reply to " . ($authorType === 'staff' ? "\u{1F7E0}" : "\u{1F7E2}")
-            . " <b>" . $esc($quoted['name']) . "</b>" . ($quoted['what'] !== '' ? ' (' . $quoted['what'] . ')' : '') . ":\n"
-            . "<blockquote expandable><i>" . $esc($qCut) . "</i></blockquote>\n";
-    }
+    $bodyText = trim(mb_substr((string)$body, 0, 3500));
 
     return $header . "\n"
         . "<b>REPLY ON ESCALATION #" . $esc($row['public_id']) . "</b>\n"
         . "Customer: " . $esc($row['company_name']) . "\n"
         . ($authorType === 'staff' ? "Status: " . $esc(statusMeta($row['status'])['label']) . "\n" : '')
         . ($hasImages ? "Images attached below.\n" : '') . "\n"
-        . $quoteHtml
         . ($bodyText !== '' ? "<blockquote>" . $esc($bodyText) . "</blockquote>\n\n" : "\n")
         . escalationUrl($row['public_id']);
 }
 
-/** Post a thread reply under the original channel message. Best effort. */
+/**
+ * Post a thread reply into the channel as a native Telegram reply to the
+ * other party's last message (fallback: the original escalation post), so
+ * the highlight shows what is being answered. Returns the sent message id
+ * or ''. Best effort, never throws.
+ */
 function postThreadReplyToTelegram(array $row, $authorType, $authorName, $body, array $imagePaths = [])
 {
     try {
@@ -336,8 +329,9 @@ function postThreadReplyToTelegram(array $row, $authorType, $authorName, $body, 
         if (telegramTopicId() > 0) {
             $params['message_thread_id'] = telegramTopicId();
         }
-        if ($row['telegram_message_id'] !== '') {
-            $params['reply_to_message_id'] = $row['telegram_message_id'];
+        $target = threadReplyTargetMessageId($row, $authorType);
+        if ($target !== '') {
+            $params['reply_to_message_id'] = $target;
         }
         $sent = tgApi('sendMessage', $params);
         $replyMsgId = ($sent && !empty($sent['ok'])) ? (string)$sent['result']['message_id'] : '';
@@ -375,8 +369,10 @@ function postThreadReplyToTelegram(array $row, $authorType, $authorName, $body, 
                 tgApi('sendMediaGroup', $photoParams);
             }
         }
+        return $replyMsgId;
     } catch (Throwable $ex) {
         error_log('[escalate] telegram thread reply failed: ' . $ex->getMessage());
+        return '';
     }
 }
 
