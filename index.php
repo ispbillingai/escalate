@@ -14,9 +14,12 @@ $topic = trim((string)($_GET['topic'] ?? ''));
 if (!in_array($topic, $topics, true)) {
     $topic = '';
 }
-$sort = $_GET['sort'] ?? 'newest';
+// Default to last-activity order: a thread that just got a reply should sit
+// at the top so nothing active gets buried. Newest/Oldest (by date raised)
+// stay as explicit choices.
+$sort = $_GET['sort'] ?? 'updated';
 if (!in_array($sort, ['newest', 'oldest', 'updated'], true)) {
-    $sort = 'newest';
+    $sort = 'updated';
 }
 $orderSql = ['newest' => 'id DESC', 'oldest' => 'id ASC', 'updated' => 'updated_at DESC'][$sort];
 $q = trim((string)($_GET['q'] ?? ''));
@@ -69,7 +72,7 @@ foreach ($db->query("SELECT topic, COUNT(*) c FROM escalations WHERE topic <> ''
 // One URL builder for every filter link: keeps the other filters sticky.
 $filterUrl = function (array $overrides = []) use ($status, $topic, $q, $sort) {
     $params = array_merge(
-        ['status' => $status, 'topic' => $topic, 'q' => $q, 'sort' => $sort === 'newest' ? '' : $sort],
+        ['status' => $status, 'topic' => $topic, 'q' => $q, 'sort' => $sort === 'updated' ? '' : $sort],
         $overrides
     );
     $params = array_filter($params, function ($v) {
@@ -110,7 +113,7 @@ pageHeader('Escalate by freeispradius: public escalation wall', 'wall');
     <form class="forum-search" method="get" action="index.php">
         <?php if ($status !== ''): ?><input type="hidden" name="status" value="<?php echo e($status); ?>"><?php endif; ?>
         <?php if ($topic !== ''): ?><input type="hidden" name="topic" value="<?php echo e($topic); ?>"><?php endif; ?>
-        <?php if ($sort !== 'newest'): ?><input type="hidden" name="sort" value="<?php echo e($sort); ?>"><?php endif; ?>
+        <?php if ($sort !== 'updated'): ?><input type="hidden" name="sort" value="<?php echo e($sort); ?>"><?php endif; ?>
         <input type="text" name="q" value="<?php echo e($q); ?>" placeholder="Search escalations: company, text, manager or #reference...">
         <button class="btn small" type="submit">Search</button>
     </form>
@@ -126,9 +129,9 @@ pageHeader('Escalate by freeispradius: public escalation wall', 'wall');
             <?php endforeach; ?>
         </select>
         <select name="sort" onchange="document.getElementById('filterForm').submit();" aria-label="Sort escalations">
-            <option value="newest" <?php echo $sort === 'newest' ? 'selected' : ''; ?>>Newest</option>
-            <option value="oldest" <?php echo $sort === 'oldest' ? 'selected' : ''; ?>>Oldest</option>
             <option value="updated" <?php echo $sort === 'updated' ? 'selected' : ''; ?>>Recently updated</option>
+            <option value="newest" <?php echo $sort === 'newest' ? 'selected' : ''; ?>>Newest (date raised)</option>
+            <option value="oldest" <?php echo $sort === 'oldest' ? 'selected' : ''; ?>>Oldest (date raised)</option>
         </select>
     </form>
     <a class="btn new-esc" href="submit.php">Raise an Escalation</a>

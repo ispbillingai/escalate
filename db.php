@@ -101,5 +101,25 @@ function getDB()
         }
     }
 
+    // One-time backfill: before replies bumped escalations.updated_at, the
+    // "Recently updated" sort ignored every thread reply, so old threads that
+    // got responses never rose. Reconcile each thread's updated_at with its
+    // latest reply once (flag-file guarded), so existing threads sort right
+    // too. Only lifts updated_at forward, never backwards.
+    $backfillFlag = __DIR__ . '/.updated_at_reply_backfill.done';
+    if (!is_file($backfillFlag)) {
+        try {
+            $pdo->exec("UPDATE escalations e
+                JOIN (SELECT escalation_id, MAX(created_at) AS last_reply
+                      FROM escalation_replies GROUP BY escalation_id) r
+                  ON r.escalation_id = e.id
+                SET e.updated_at = r.last_reply
+                WHERE r.last_reply > e.updated_at");
+            @file_put_contents($backfillFlag, (string)time());
+        } catch (Throwable $e) {
+            error_log('[escalate] updated_at reply backfill failed: ' . $e->getMessage());
+        }
+    }
+
     return $pdo;
 }

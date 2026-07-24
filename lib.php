@@ -248,6 +248,16 @@ function addReply(array $row, $authorType, $authorName, $body, $ip, array $image
     $stmt = $db->prepare("INSERT INTO escalation_replies (escalation_id, author_type, author_name, body, images_json, submit_ip) VALUES (?,?,?,?,?,?)");
     $stmt->execute([(int)$row['id'], $authorType, $authorName, $body, json_encode($saved), substr((string)$ip, 0, 45)]);
     $replyRowId = (int)$db->lastInsertId();
+    // A new reply is fresh activity on the thread, so the "Recently updated"
+    // wall sort must surface it. A reply is an INSERT into escalation_replies,
+    // a different table, so escalations.updated_at (ON UPDATE only fires when
+    // the escalations row itself changes) would never move without this
+    // explicit bump. Applies to both staff and company replies.
+    try {
+        $db->prepare("UPDATE escalations SET updated_at = NOW() WHERE id = ?")->execute([(int)$row['id']]);
+    } catch (Throwable $ex) {
+        error_log('[escalate] updated_at bump failed: ' . $ex->getMessage());
+    }
     if ($authorType === 'company') {
         // The customer spoke: any pending "no response in 2 days" countdown resets.
         try {
