@@ -265,6 +265,8 @@ function addReply(array $row, $authorType, $authorName, $body, $ip, array $image
         } catch (Throwable $ex) {
             error_log('[escalate] nudge reset failed: ' . $ex->getMessage());
         }
+        // ...and staff get a WhatsApp ping, same as for a brand new escalation.
+        notifyReplyByWhatsApp($row, $authorName, $body, (bool)$saved);
     }
     $tgMsgId = postThreadReplyToTelegram($row, $authorType, $authorName, $body, $saved);
     if ($tgMsgId !== '') {
@@ -637,21 +639,16 @@ function postEscalationToTelegram(array $row)
 }
 
 /**
- * WhatsApp alert to staff when a new escalation lands. Best effort, never
- * blocks or fails the submission. Configured via WHATSAPP_ALERT_* constants.
+ * Send one WhatsApp line to staff. Best effort: never blocks, never throws,
+ * silently does nothing when the WHATSAPP_ALERT_* constants are not set.
  */
-function notifyEscalationByWhatsApp(array $row)
+function sendStaffWhatsApp($msg)
 {
     if (!defined('WHATSAPP_ALERT_URL') || WHATSAPP_ALERT_URL === ''
         || !defined('WHATSAPP_ALERT_TO') || WHATSAPP_ALERT_TO === '') {
         return;
     }
     try {
-        $msg = 'New escalation #' . $row['public_id']
-            . ' from ' . $row['company_name']
-            . ((string)($row['topic'] ?? '') !== '' ? ' (' . $row['topic'] . ')' : '')
-            . ($row['account_manager'] !== '' ? ', manager ' . $row['account_manager'] : '')
-            . '. ' . escalationUrl($row['public_id']);
         $url = WHATSAPP_ALERT_URL
             . '?to=' . rawurlencode(WHATSAPP_ALERT_TO)
             . '&msg=' . rawurlencode($msg)
@@ -667,6 +664,47 @@ function notifyEscalationByWhatsApp(array $row)
     } catch (Throwable $e) {
         error_log('[escalate] whatsapp alert failed: ' . $e->getMessage());
     }
+}
+
+/**
+ * WhatsApp alert to staff when a new escalation lands. Best effort, never
+ * blocks or fails the submission. Configured via WHATSAPP_ALERT_* constants.
+ */
+function notifyEscalationByWhatsApp(array $row)
+{
+    $msg = 'New escalation #' . $row['public_id']
+        . ' from ' . $row['company_name']
+        . ((string)($row['topic'] ?? '') !== '' ? ' (' . $row['topic'] . ')' : '')
+        . ($row['account_manager'] !== '' ? ', manager ' . $row['account_manager'] : '')
+        . '. ' . escalationUrl($row['public_id']);
+    sendStaffWhatsApp($msg);
+}
+
+/**
+ * WhatsApp alert to staff when the CUSTOMER replies on a thread, so a waiting
+ * answer is not missed while nobody is watching Telegram. Staff replies are
+ * not alerted: they come from the team itself. Best effort, same constants.
+ */
+function notifyReplyByWhatsApp(array $row, $authorName, $body, $hasImages = false)
+{
+    $who = trim(preg_replace('/\s+/u', ' ', (string)$authorName));
+    if ($who === '') {
+        $who = (string)$row['company_name'];
+    }
+    $snippet = trim(preg_replace('/\s+/u', ' ', (string)$body));
+    if (mb_strlen($snippet) > 300) {
+        $snippet = mb_substr($snippet, 0, 300) . '...';
+    }
+    if ($snippet === '') {
+        $snippet = $hasImages ? '(images only)' : '(no text)';
+    } elseif ($hasImages) {
+        $snippet .= ' [images attached]';
+    }
+    $msg = $who . ' replied on escalation #' . $row['public_id']
+        . ' (' . statusMeta($row['status'])['label'] . ')'
+        . ': ' . $snippet
+        . ' ' . escalationUrl($row['public_id']);
+    sendStaffWhatsApp($msg);
 }
 
 // ---------------------------------------------------------------------------

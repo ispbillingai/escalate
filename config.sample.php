@@ -25,7 +25,8 @@ define('TELEGRAM_CHANNEL_URL', 'https://t.me/freeispradius');
 // means topic 24886. Leave empty to post to the General topic / plain channel.
 define('TELEGRAM_TOPIC_ID', '');
 
-// WhatsApp alert to staff when a new escalation lands. Leave empty to disable.
+// WhatsApp alert to staff when a new escalation lands AND when a customer
+// replies on a thread. Leave empty to disable.
 // The URL is called as: <url>?to=<number>&msg=<text>&secret=<secret>
 define('WHATSAPP_ALERT_URL', '');      // e.g. https://whatsapp.ispledger.com/api/sendWA.php
 define('WHATSAPP_ALERT_SECRET', '');
