@@ -10,7 +10,8 @@ if (isset($_GET['logout'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password']) && empty($_SESSION['esc_admin'])) {
-    if (hash_equals(ADMIN_PASSWORD, (string)$_POST['password'])) {
+    // trim: a phone keyboard can add a space after a suggested word, unseen behind the dots.
+    if (hash_equals(ADMIN_PASSWORD, trim((string)$_POST['password']))) {
         $_SESSION['esc_admin'] = true;
         header('Location: admin.php');
         exit;
@@ -25,7 +26,7 @@ if (empty($_SESSION['esc_admin'])) {
         echo '<div class="errors"><ul><li>' . e($loginError) . '</li></ul></div>';
     }
     echo '<form method="post" action="admin.php">'
-        . '<div class="field"><label>Password</label><input type="text" name="password" autocomplete="off" style="-webkit-text-security:disc;"></div>'
+        . '<div class="field"><label>Password</label><input type="text" name="password" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;"></div>'
         . '<button class="btn" type="submit" style="width:100%;">Sign in</button></form></div>';
     pageFooter();
     exit;
